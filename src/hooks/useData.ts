@@ -139,8 +139,14 @@ export function useData() {
 
     const tasksChannel = supabase
       .channel('tasks-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, () => {
         fetchTasks();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, () => {
+        fetchTasks();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
+        removeTask(payload.old.id);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'subtasks' }, () => {
         fetchTasks();
@@ -148,11 +154,20 @@ export function useData() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, () => {
         fetchTasks();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_tags' }, () => {
+        fetchTasks();
+      })
       .subscribe();
 
     const ideasChannel = supabase
       .channel('ideas-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ideas' }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ideas' }, () => {
+        fetchIdeas();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ideas' }, () => {
+        fetchIdeas();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'ideas' }, () => {
         fetchIdeas();
       })
       .subscribe();
@@ -164,12 +179,17 @@ export function useData() {
       })
       .subscribe();
 
+    const tagsChannel = supabase
+      .channel('tags-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tags' }, () => {
+        fetchTags();
+      })
+      .subscribe();
+
     const emailsChannel = supabase
       .channel('emails-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inbound_emails' }, () => {
         fetchEmails();
-        fetchTasks();
-        fetchIdeas();
       })
       .subscribe();
 
@@ -177,9 +197,10 @@ export function useData() {
       tasksChannel.unsubscribe();
       ideasChannel.unsubscribe();
       peopleChannel.unsubscribe();
+      tagsChannel.unsubscribe();
       emailsChannel.unsubscribe();
     };
-  }, [fetchTasks, fetchDivisions, fetchTags, fetchIdeas, fetchPeople, fetchEmails]);
+  }, [fetchTasks, fetchDivisions, fetchTags, fetchIdeas, fetchPeople, fetchEmails, removeTask]);
 
   return {
     fetchTasks,
@@ -210,19 +231,31 @@ export async function createTask(data: {
       due_date: data.due_date || null,
       order_rank: data.order_rank || Date.now(),
     })
-    .select()
+    .select(`
+      *,
+      tags:task_tags(tag:tags(*)),
+      divisions:task_divisions(division:divisions(*)),
+      subtasks(*),
+      notes(*)
+    `)
     .single();
 
   if (error) throw error;
 
-  await supabase.from('event_log').insert({
+  supabase.from('event_log').insert({
     entity_type: 'task',
     entity_id: task.id,
     action: 'created',
     changes: { task },
   });
 
-  return task;
+  return {
+    ...task,
+    tags: task.tags?.map((t: any) => t.tag) || [],
+    divisions: task.divisions?.map((d: any) => d.division) || [],
+    subtasks: task.subtasks || [],
+    notes: task.notes || [],
+  };
 }
 
 export async function updateTaskData(id: string, updates: Partial<Task>) {
@@ -233,7 +266,7 @@ export async function updateTaskData(id: string, updates: Partial<Task>) {
 
   if (error) throw error;
 
-  await supabase.from('event_log').insert({
+  supabase.from('event_log').insert({
     entity_type: 'task',
     entity_id: id,
     action: 'updated',
@@ -246,7 +279,7 @@ export async function deleteTask(id: string) {
 
   if (error) throw error;
 
-  await supabase.from('event_log').insert({
+  supabase.from('event_log').insert({
     entity_type: 'task',
     entity_id: id,
     action: 'deleted',
@@ -266,7 +299,7 @@ export async function moveTask(id: string, lane: Lane, order_rank: number) {
 
   if (error) throw error;
 
-  await supabase.from('event_log').insert({
+  supabase.from('event_log').insert({
     entity_type: 'task',
     entity_id: id,
     action: 'moved',
@@ -317,7 +350,7 @@ export async function deleteIdea(id: string) {
 
   if (error) throw error;
 
-  await supabase.from('event_log').insert({
+  supabase.from('event_log').insert({
     entity_type: 'idea',
     entity_id: id,
     action: 'deleted',

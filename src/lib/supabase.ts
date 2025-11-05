@@ -14,7 +14,10 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   },
   realtime: {
     params: {
-      eventsPerSecond: 10
+      eventsPerSecond: 50
     }
+  },
+  db: {
+    schema: 'public'
   }
 });

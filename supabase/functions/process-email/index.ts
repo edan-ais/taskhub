@@ -23,7 +23,7 @@ function extractHashtags(text: string): string[] {
 }
 
 function extractMentions(text: string): string[] {
-  const mentionRegex = /@([a-zA-Z0-9_\s]+?)(?=\s|$|,|\.)/g;
+  const mentionRegex = /@([a-zA-Z0-9_\s]+?)(?=\s|$|,|\.|#)/g;
   const matches = text.match(mentionRegex);
   return matches ? matches.map(mention => mention.slice(1).trim()) : [];
 }
@@ -159,8 +159,12 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    console.log('Processing email from:', sender_email, 'Subject:', subject);
+
     const bodyContent = body_text || body_html || '';
     const parsedMetadata = parseEmailContent(subject || '', bodyContent);
+
+    console.log('Parsed metadata:', JSON.stringify(parsedMetadata));
 
     const { data: emailRecord, error: emailError } = await supabase
       .from('inbound_emails')
@@ -188,6 +192,8 @@ Deno.serve(async (req: Request) => {
         }
       );
     }
+
+    console.log('Email record created:', emailRecord.id);
 
     if (attachments && Array.isArray(attachments)) {
       for (const attachment of attachments) {
@@ -217,12 +223,14 @@ Deno.serve(async (req: Request) => {
         name: senderInfo.name,
         email: senderInfo.email,
       });
+      console.log('Created new person:', senderInfo.name);
     }
 
     let createdTaskId = null;
     let createdIdeaId = null;
 
     if (parsedMetadata.isIdea && !parsedMetadata.isTask) {
+      console.log('Creating idea from email');
       const { data: ideaData, error: ideaError } = await supabase
         .from('ideas')
         .insert({
@@ -236,6 +244,7 @@ Deno.serve(async (req: Request) => {
 
       if (!ideaError && ideaData) {
         createdIdeaId = ideaData.id;
+        console.log('Created idea:', ideaData.id);
 
         if (parsedMetadata.tags.length > 0) {
           for (const tagName of parsedMetadata.tags) {
@@ -264,8 +273,11 @@ Deno.serve(async (req: Request) => {
             }
           }
         }
+      } else if (ideaError) {
+        console.error('Error creating idea:', ideaError);
       }
     } else {
+      console.log('Creating task from email');
       const priorityToTag: Record<string, string> = {
         urgent: 'Urgent',
         high: 'High Priority',
@@ -289,6 +301,7 @@ Deno.serve(async (req: Request) => {
 
       if (!taskError && taskData) {
         createdTaskId = taskData.id;
+        console.log('Created task:', taskData.id);
 
         const allTags = [...parsedMetadata.tags];
         if (parsedMetadata.priority && priorityToTag[parsedMetadata.priority]) {
@@ -323,12 +336,14 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        await supabase.from('event_log').insert({
+        supabase.from('event_log').insert({
           entity_type: 'task',
           entity_id: taskData.id,
           action: 'created',
           changes: { source: 'email', email_id: emailRecord.id },
         });
+      } else if (taskError) {
+        console.error('Error creating task:', taskError);
       }
     }
 
@@ -341,6 +356,8 @@ Deno.serve(async (req: Request) => {
         created_idea_id: createdIdeaId,
       })
       .eq('id', emailRecord.id);
+
+    console.log('Email processing complete. Task ID:', createdTaskId, 'Idea ID:', createdIdeaId);
 
     return new Response(
       JSON.stringify({

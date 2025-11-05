@@ -115,9 +115,14 @@ export function TaskDrawer() {
       'Delete Task',
       'Are you sure you want to delete this task? This action cannot be undone.',
       async () => {
-        await deleteTask(selectedTask.id);
-        removeTask(selectedTask.id);
+        const taskId = selectedTask.id;
         handleClose();
+        removeTask(taskId);
+        try {
+          await deleteTask(taskId);
+        } catch (error) {
+          console.error('Failed to delete task:', error);
+        }
       }
     );
   };

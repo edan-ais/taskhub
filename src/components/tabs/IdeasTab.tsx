@@ -58,8 +58,12 @@ export function IdeasTab() {
       'Delete Idea',
       'Are you sure you want to delete this idea? This action cannot be undone.',
       async () => {
-        await deleteIdea(id);
         removeIdea(id);
+        try {
+          await deleteIdea(id);
+        } catch (error) {
+          console.error('Failed to delete idea:', error);
+        }
       }
     );
   };
