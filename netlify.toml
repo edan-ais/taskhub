@@ -6,6 +6,16 @@
   from = "/*"
   to = "/index.html"
   status = 200
+  force = false
+  conditions = {Role = ["*"]}
 
 [build.environment]
   NODE_VERSION = "18"
+  NPM_FLAGS = "--legacy-peer-deps"
+
+# Development settings
+[context.deploy-preview]
+  command = "npm run build"
+
+[context.branch-deploy]
+  command = "npm run build"

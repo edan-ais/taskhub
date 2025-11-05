@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnostic Page</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 { color: #333; margin-top: 0; }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        .warning { color: #f59e0b; }
+        code {
+            background: #f3f4f6;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .check-item {
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #e5e7eb;
+            background: #f9fafb;
+        }
+        .check-item.pass { border-left-color: #10b981; }
+        .check-item.fail { border-left-color: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🔍 Netlify Deployment Diagnostic</h1>
+        <p>This page helps diagnose deployment issues.</p>
+    </div>
+
+    <div class="card">
+        <h2>Quick Checks</h2>
+        <div id="checks"></div>
+    </div>
+
+    <div class="card">
+        <h2>Expected Values</h2>
+        <p>Your environment variables should be:</p>
+        <div class="check-item">
+            <strong>VITE_SUPABASE_URL:</strong><br>
+            <code>https://nsxrwbqfyfrajhqinmhg.supabase.co</code>
+        </div>
+        <div class="check-item">
+            <strong>VITE_SUPABASE_ANON_KEY:</strong><br>
+            <code style="word-break: break-all;">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...</code> (should be a long JWT token)
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>How to Fix</h2>
+        <ol>
+            <li>Go to Netlify dashboard</li>
+            <li>Site configuration → Environment variables</li>
+            <li>Add the two variables above</li>
+            <li>Set scope to "All"</li>
+            <li>Trigger new deploy</li>
+            <li>Wait for build to complete</li>
+            <li>Clear browser cache and refresh</li>
+        </ol>
+    </div>
+
+    <script>
+        const checks = document.getElementById('checks');
+
+        // Check 1: Can we reach this page
+        checks.innerHTML += `
+            <div class="check-item pass">
+                <strong class="success">✓ Static files are loading</strong><br>
+                This diagnostic page loaded successfully.
+            </div>
+        `;
+
+        // Check 2: Check if we can fetch the main JS
+        fetch('/assets/index-D_FF7pkQ.js', { method: 'HEAD' })
+            .then(() => {
+                checks.innerHTML += `
+                    <div class="check-item pass">
+                        <strong class="success">✓ JavaScript bundle exists</strong><br>
+                        The main application file is present.
+                    </div>
+                `;
+            })
+            .catch(() => {
+                checks.innerHTML += `
+                    <div class="check-item fail">
+                        <strong class="error">✗ JavaScript bundle missing</strong><br>
+                        Build may have failed. Check Netlify build logs.
+                    </div>
+                `;
+            });
+
+        // Check 3: Basic info
+        checks.innerHTML += `
+            <div class="check-item">
+                <strong>Browser:</strong> ${navigator.userAgent}<br>
+                <strong>URL:</strong> ${window.location.href}<br>
+                <strong>Protocol:</strong> ${window.location.protocol}<br>
+            </div>
+        `;
+
+        // Check 4: Instructions
+        checks.innerHTML += `
+            <div class="check-item warning">
+                <strong class="warning">⚠ If main site is blank:</strong><br>
+                Environment variables are likely missing or incorrect in Netlify.
+                The app cannot initialize without them.
+            </div>
+        `;
+    </script>
+</body>
+</html>
