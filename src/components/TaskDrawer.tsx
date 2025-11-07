@@ -1,5 +1,18 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar, User, Tag, FileText, CheckSquare, Plus, Trash2, Edit2 } from 'lucide-react';
+import {
+  X,
+  Calendar,
+  User,
+  Tag,
+  FileText,
+  CheckSquare,
+  Plus,
+  Trash2,
+  Edit2,
+  Link2,
+  Paperclip,
+  Layers,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { useAppStore } from '../lib/store';
@@ -34,8 +47,27 @@ interface TempSubtask {
   progress_state: ProgressState;
 }
 
+interface LinkItem {
+  id?: string;
+  label: string;
+  url: string;
+}
+
+interface UploadedFile {
+  name: string;
+  url: string;
+}
+
 export function TaskDrawer() {
-  const { selectedTask, setSelectedTask, updateTask, removeTask, tags, addTask, showDeleteConfirmation } = useAppStore();
+  const {
+    selectedTask,
+    setSelectedTask,
+    updateTask,
+    removeTask,
+    tags,
+    showDeleteConfirmation,
+    divisions,
+  } = useAppStore();
   const [newSubtask, setNewSubtask] = useState('');
   const [tempSubtasks, setTempSubtasks] = useState<TempSubtask[]>([]);
   const [tempTags, setTempTags] = useState<TagType[]>([]);
@@ -46,6 +78,11 @@ export function TaskDrawer() {
   const [newAssignee, setNewAssignee] = useState('');
   const [showAssigneeInput, setShowAssigneeInput] = useState(false);
   const [editingSubtask, setEditingSubtask] = useState<string | null>(null);
+  const [editingSubtaskTitle, setEditingSubtaskTitle] = useState('');
+  const [newLinkLabel, setNewLinkLabel] = useState('');
+  const [newLinkUrl, setNewLinkUrl] = useState('');
+  const [tempLinks, setTempLinks] = useState<LinkItem[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
   const isNewTask = selectedTask?.id.startsWith('temp-');
   const { people } = useAppStore.getState();
 
@@ -53,19 +90,22 @@ export function TaskDrawer() {
     if (selectedTask && isNewTask) {
       setTempSubtasks([]);
       setTempTags([]);
+      setTempLinks([]);
     }
-  }, [selectedTask?.id]);
+  }, [selectedTask?.id, isNewTask]);
 
   if (!selectedTask) return null;
 
   const handleClose = () => {
     setTempSubtasks([]);
     setTempTags([]);
+    setTempLinks([]);
     setNewSubtask('');
     setNewNote('');
     setNewAssignee('');
     setShowAssigneeInput(false);
     setEditingSubtask(null);
+    setEditingSubtaskTitle('');
     setSelectedTask(null);
   };
 
@@ -87,6 +127,7 @@ export function TaskDrawer() {
         assignee: selectedTask.assignee,
         due_date: selectedTask.due_date,
         order_rank: selectedTask.order_rank,
+        division_id: selectedTask.division_id ?? null,
       });
 
       for (const tempSubtask of tempSubtasks) {
@@ -95,6 +136,12 @@ export function TaskDrawer() {
 
       for (const tempTag of tempTags) {
         await addTagToTask(newTask.id, tempTag.id);
+      }
+
+      if (tempLinks.length) {
+        await updateTaskData(newTask.id, {
+          links: tempLinks,
+        });
       }
 
       removeTask(selectedTask.id);
@@ -132,7 +179,10 @@ export function TaskDrawer() {
 
     if (isNewTask) {
       const tempId = 'temp-subtask-' + Date.now();
-      setTempSubtasks([...tempSubtasks, { id: tempId, title: newSubtask, progress_state: 'not_started' }]);
+      setTempSubtasks([
+        ...tempSubtasks,
+        { id: tempId, title: newSubtask, progress_state: 'not_started' },
+      ]);
       setNewSubtask('');
     } else {
       handleAddSubtaskToExisting();
@@ -144,7 +194,11 @@ export function TaskDrawer() {
     const maxOrderRank = selectedTask.subtasks?.length
       ? Math.max(...selectedTask.subtasks.map((st) => st.order_rank))
       : 0;
-    const subtask = await createSubtask(selectedTask.id, newSubtask, maxOrderRank + 1000);
+    const subtask = await createSubtask(
+      selectedTask.id,
+      newSubtask,
+      maxOrderRank + 1000
+    );
     updateTask(selectedTask.id, {
       subtasks: [...(selectedTask.subtasks || []), subtask],
     });
@@ -153,19 +207,24 @@ export function TaskDrawer() {
 
   const handleUpdateSubtask = async (id: string, updates: any) => {
     if (isNewTask) {
-      setTempSubtasks(tempSubtasks.map(st => st.id === id ? { ...st, ...updates } : st));
+      setTempSubtasks((prev) =>
+        prev.map((st) => (st.id === id ? { ...st, ...updates } : st))
+      );
     } else {
       await updateSubtask(id, updates);
       updateTask(selectedTask.id, {
-        subtasks: selectedTask.subtasks?.map((st) => (st.id === id ? { ...st, ...updates } : st)),
+        subtasks: selectedTask.subtasks?.map((st) =>
+          st.id === id ? { ...st, ...updates } : st
+        ),
       });
     }
     setEditingSubtask(null);
+    setEditingSubtaskTitle('');
   };
 
   const handleDeleteSubtask = async (id: string) => {
     if (isNewTask) {
-      setTempSubtasks(tempSubtasks.filter(st => st.id !== id));
+      setTempSubtasks(tempSubtasks.filter((st) => st.id !== id));
     } else {
       await deleteSubtask(id);
       updateTask(selectedTask.id, {
@@ -186,7 +245,9 @@ export function TaskDrawer() {
   const handleUpdateNote = async (id: string, content: string) => {
     await updateNote(id, content);
     updateTask(selectedTask.id, {
-      notes: selectedTask.notes?.map((n) => (n.id === id ? { ...n, content } : n)),
+      notes: selectedTask.notes?.map((n) =>
+        n.id === id ? { ...n, content } : n
+      ),
     });
   };
 
@@ -199,11 +260,11 @@ export function TaskDrawer() {
 
   const handleToggleTag = async (tagId: string) => {
     if (isNewTask) {
-      const hasTag = tempTags.some(t => t.id === tagId);
+      const hasTag = tempTags.some((t) => t.id === tagId);
       if (hasTag) {
-        setTempTags(tempTags.filter(t => t.id !== tagId));
+        setTempTags(tempTags.filter((t) => t.id !== tagId));
       } else {
-        const tag = tags.find(t => t.id === tagId);
+        const tag = tags.find((t) => t.id === tagId);
         if (tag) {
           setTempTags([...tempTags, tag]);
         }
@@ -263,8 +324,84 @@ export function TaskDrawer() {
     }
   };
 
+  const handleAddLink = async () => {
+    if (!newLinkLabel.trim() || !newLinkUrl.trim()) return;
+    const newLink: LinkItem = {
+      id: 'temp-link-' + Date.now(),
+      label: newLinkLabel.trim(),
+      url: newLinkUrl.trim(),
+    };
+
+    if (isNewTask) {
+      setTempLinks((prev) => [...prev, newLink]);
+    } else {
+      const currentLinks: LinkItem[] = selectedTask.links || [];
+      const updatedLinks = [...currentLinks, { label: newLink.label, url: newLink.url }];
+      await handleUpdate({ links: updatedLinks });
+    }
+
+    setNewLinkLabel('');
+    setNewLinkUrl('');
+  };
+
+  const handleDeleteLink = async (idx: number) => {
+    if (isNewTask) {
+      setTempLinks((prev) => prev.filter((_, i) => i !== idx));
+    } else {
+      const currentLinks: LinkItem[] = selectedTask.links || [];
+      const updatedLinks = currentLinks.filter((_, i) => i !== idx);
+      await handleUpdate({ links: updatedLinks });
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || !files.length) return;
+    if (isNewTask) {
+      // easiest/safest: require save first
+      alert('Save the task first before uploading files.');
+      return;
+    }
+
+    setUploadingFiles(true);
+    const currentFiles: UploadedFile[] = selectedTask.files || [];
+    const uploadedFiles: UploadedFile[] = [...currentFiles];
+
+    for (const file of Array.from(files)) {
+      const path = `${selectedTask.id}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from('task-files')
+        .upload(path, file);
+
+      if (!uploadError) {
+        const { data: publicUrlData } = supabase.storage
+          .from('task-files')
+          .getPublicUrl(path);
+
+        const fileUrl =
+          publicUrlData?.publicUrl ||
+          (publicUrlData as any)?.public_url ||
+          '';
+
+        uploadedFiles.push({
+          name: file.name,
+          url: fileUrl,
+        });
+      } else {
+        console.error('Failed to upload file: ', uploadError);
+      }
+    }
+
+    await handleUpdate({ files: uploadedFiles });
+    setUploadingFiles(false);
+    // reset input
+    e.target.value = '';
+  };
+
   const displayTags = isNewTask ? tempTags : selectedTask.tags || [];
   const displaySubtasks = isNewTask ? tempSubtasks : selectedTask.subtasks || [];
+  const displayLinks = isNewTask ? tempLinks : selectedTask.links || [];
+  const displayFiles: UploadedFile[] = selectedTask.files || [];
 
   return (
     <AnimatePresence>
@@ -294,15 +431,21 @@ export function TaskDrawer() {
                   placeholder="Task title"
                 />
               </div>
-              <button onClick={handleClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+              <button
+                onClick={handleClose}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              >
                 <X size={24} />
               </button>
             </div>
           </div>
 
           <div className="p-6 space-y-6">
+            {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Description
+              </label>
               <textarea
                 value={selectedTask.description}
                 onChange={(e) => handleUpdate({ description: e.target.value })}
@@ -312,7 +455,8 @@ export function TaskDrawer() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* Assignee / Due / Division */}
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   <User size={16} className="inline mr-1" />
@@ -321,7 +465,7 @@ export function TaskDrawer() {
                 {!showAssigneeInput ? (
                   <div className="space-y-2">
                     <select
-                      value={selectedTask.assignee}
+                      value={selectedTask.assignee || ''}
                       onChange={(e) => {
                         if (e.target.value === '__new__') {
                           setShowAssigneeInput(true);
@@ -378,14 +522,42 @@ export function TaskDrawer() {
                 <input
                   type="date"
                   value={selectedTask.due_date || ''}
-                  onChange={(e) => handleUpdate({ due_date: e.target.value || null })}
+                  onChange={(e) =>
+                    handleUpdate({ due_date: e.target.value || null })
+                  }
                   className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <Layers size={16} className="inline mr-1" />
+                  Division
+                </label>
+                <select
+                  value={selectedTask.division_id || ''}
+                  onChange={(e) =>
+                    handleUpdate({
+                      division_id: e.target.value || null,
+                    })
+                  }
+                  className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">No division</option>
+                  {divisions?.map((division) => (
+                    <option key={division.id} value={division.id}>
+                      {division.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
+            {/* Progress */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Progress State</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Progress State
+              </label>
               <select
                 value={selectedTask.progress_state}
                 onChange={(e) => handleUpdate({ progress_state: e.target.value })}
@@ -399,6 +571,7 @@ export function TaskDrawer() {
               </select>
             </div>
 
+            {/* Tags */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <Tag size={16} className="inline mr-1" />
@@ -421,7 +594,6 @@ export function TaskDrawer() {
                           backgroundColor: `${tag.color}20`,
                           color: tag.color,
                           borderColor: tag.color,
-                          ringColor: isSelected ? tag.color : 'transparent',
                         }}
                       >
                         {tag.name}
@@ -472,21 +644,32 @@ export function TaskDrawer() {
               </div>
             </div>
 
+            {/* Subtasks */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <CheckSquare size={16} className="inline mr-1" />
-                Subtasks ({displaySubtasks.filter((st) => st.progress_state === 'completed').length}/
-                {displaySubtasks.length})
+                Subtasks (
+                {
+                  displaySubtasks.filter(
+                    (st) => st.progress_state === 'completed'
+                  ).length
+                }
+                /{displaySubtasks.length})
               </label>
               <div className="space-y-2">
                 {displaySubtasks.map((subtask) => (
-                  <div key={subtask.id} className="flex items-center gap-2 bg-slate-50 p-3 rounded-lg border-2 border-slate-200">
+                  <div
+                    key={subtask.id}
+                    className="flex items-center gap-2 bg-slate-50 p-3 rounded-lg border-2 border-slate-200"
+                  >
                     <input
                       type="checkbox"
                       checked={subtask.progress_state === 'completed'}
                       onChange={(e) =>
                         handleUpdateSubtask(subtask.id, {
-                          progress_state: e.target.checked ? 'completed' : 'not_started',
+                          progress_state: e.target.checked
+                            ? 'completed'
+                            : 'not_started',
                         })
                       }
                       className="w-4 h-4 rounded border-slate-300"
@@ -495,26 +678,28 @@ export function TaskDrawer() {
                       <>
                         <input
                           type="text"
-                          value={subtask.title}
-                          onChange={(e) => {
-                            if (isNewTask) {
-                              setTempSubtasks(tempSubtasks.map(st =>
-                                st.id === subtask.id ? { ...st, title: e.target.value } : st
-                              ));
-                            }
-                          }}
+                          value={editingSubtaskTitle}
+                          onChange={(e) => setEditingSubtaskTitle(e.target.value)}
                           onBlur={() => {
-                            if (!isNewTask) {
-                              handleUpdateSubtask(subtask.id, { title: subtask.title });
+                            if (editingSubtaskTitle.trim()) {
+                              handleUpdateSubtask(subtask.id, {
+                                title: editingSubtaskTitle.trim(),
+                              });
+                            } else {
+                              setEditingSubtask(null);
+                              setEditingSubtaskTitle('');
                             }
-                            setEditingSubtask(null);
                           }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                              if (!isNewTask) {
-                                handleUpdateSubtask(subtask.id, { title: subtask.title });
+                              if (editingSubtaskTitle.trim()) {
+                                handleUpdateSubtask(subtask.id, {
+                                  title: editingSubtaskTitle.trim(),
+                                });
+                              } else {
+                                setEditingSubtask(null);
+                                setEditingSubtaskTitle('');
                               }
-                              setEditingSubtask(null);
                             }
                           }}
                           className="flex-1 px-2 py-1 bg-white border border-slate-300 rounded outline-none focus:ring-2 focus:ring-blue-500"
@@ -525,7 +710,10 @@ export function TaskDrawer() {
                       <>
                         <span className="flex-1">{subtask.title}</span>
                         <button
-                          onClick={() => setEditingSubtask(subtask.id)}
+                          onClick={() => {
+                            setEditingSubtask(subtask.id);
+                            setEditingSubtaskTitle(subtask.title);
+                          }}
                           className="p-1 hover:bg-blue-100 rounded text-blue-600"
                         >
                           <Edit2 size={14} />
@@ -559,6 +747,107 @@ export function TaskDrawer() {
               </div>
             </div>
 
+            {/* Links */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                <Link2 size={16} className="inline mr-1" />
+                Links
+              </label>
+              <div className="space-y-2">
+                {displayLinks.length > 0 &&
+                  displayLinks.map((link, idx) => (
+                    <div
+                      key={link.id || `${link.url}-${idx}`}
+                      className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border-2 border-slate-200"
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-medium text-slate-800">
+                          {link.label}
+                        </span>
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm text-blue-600 underline break-all"
+                        >
+                          {link.url}
+                        </a>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteLink(idx)}
+                        className="p-1 hover:bg-red-100 rounded text-red-600"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newLinkLabel}
+                    onChange={(e) => setNewLinkLabel(e.target.value)}
+                    className="flex-1 px-3 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Link label (e.g. Figma, Doc, Drive)"
+                  />
+                  <input
+                    type="url"
+                    value={newLinkUrl}
+                    onChange={(e) => setNewLinkUrl(e.target.value)}
+                    className="flex-1 px-3 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="https://example.com"
+                  />
+                  <button
+                    onClick={handleAddLink}
+                    className="px-3 h-10 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    <Plus size={20} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Files */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                <Paperclip size={16} className="inline mr-1" />
+                Files
+              </label>
+              <div className="space-y-2">
+                {!isNewTask ? (
+                  <input
+                    type="file"
+                    multiple
+                    onChange={handleFileUpload}
+                    className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                ) : (
+                  <p className="text-sm text-slate-500 bg-slate-50 rounded-lg p-3 border border-slate-200">
+                    Save this task first to upload files.
+                  </p>
+                )}
+                {uploadingFiles && (
+                  <p className="text-sm text-slate-400">Uploading…</p>
+                )}
+                {displayFiles.length > 0 && (
+                  <ul className="space-y-1">
+                    {displayFiles.map((file, idx) => (
+                      <li key={file.url || idx} className="flex items-center gap-2">
+                        <a
+                          href={file.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 underline break-all"
+                        >
+                          {file.name}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            {/* Notes */}
             {!isNewTask && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -567,11 +856,16 @@ export function TaskDrawer() {
                 </label>
                 <div className="space-y-2">
                   {selectedTask.notes?.map((note) => (
-                    <div key={note.id} className="bg-amber-50 p-4 rounded-lg border-2 border-amber-200">
+                    <div
+                      key={note.id}
+                      className="bg-amber-50 p-4 rounded-lg border-2 border-amber-200"
+                    >
                       <div className="flex justify-between items-start gap-2">
                         <textarea
                           value={note.content}
-                          onChange={(e) => handleUpdateNote(note.id, e.target.value)}
+                          onChange={(e) =>
+                            handleUpdateNote(note.id, e.target.value)
+                          }
                           className="flex-1 bg-transparent outline-none resize-none"
                           rows={2}
                         />
@@ -605,6 +899,7 @@ export function TaskDrawer() {
               </div>
             )}
 
+            {/* Footer buttons */}
             <div className="pt-4 border-t space-y-3">
               <button
                 onClick={handleSaveTask}
