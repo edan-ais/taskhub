@@ -44,13 +44,18 @@ export function Lane({
   };
 
   return (
-    <div
+    <motion.div
       ref={setNodeRef}
-      className={`flex flex-col min-h-full border-2 border-slate-300 rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 ${
+      initial={false}
+      animate={{
+        maxHeight: isCollapsed ? 84 : 1000, // ~header height collapsed
+      }}
+      transition={{ duration: 0.3, ease: "easeInOut" }}
+      className={`flex flex-col min-h-[84px] border-2 border-slate-300 rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 ${
         isOver ? "border-blue-500 scale-[1.01]" : ""
       }`}
     >
-      {/* Header */}
+      {/* HEADER */}
       <div className="flex-shrink-0 bg-white border-b border-slate-300 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -62,7 +67,7 @@ export function Lane({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Collapse button */}
+            {/* Collapse Toggle (Mobile Only) */}
             <button
               onClick={onToggleCollapse}
               className="md:hidden p-2 rounded-lg border border-slate-300 hover:bg-slate-100 transition-colors"
@@ -82,6 +87,7 @@ export function Lane({
               </motion.svg>
             </button>
 
+            {/* Add Task Button */}
             <button
               onClick={handleAddTask}
               className="p-2 hover:bg-slate-100 rounded-lg border border-slate-300 transition-colors group"
@@ -96,16 +102,9 @@ export function Lane({
         </div>
       </div>
 
-      {/* Content area fills full height and stays colored */}
-      <motion.div
-        initial={false}
-        animate={{
-          opacity: isCollapsed ? 0 : 1,
-          y: isCollapsed ? -12 : 0,
-          height: isCollapsed ? 0 : "auto",
-        }}
-        transition={{ duration: 0.3, ease: "easeInOut" }}
-        className={`flex-1 min-h-full p-4 ${laneColors[lane]} border-t-0`}
+      {/* TASK CONTENT */}
+      <div
+        className={`flex-1 min-h-full overflow-y-auto p-4 ${laneColors[lane]} border-t-0`}
       >
         <SortableContext
           items={tasks.map((t) => t.id)}
@@ -122,7 +121,7 @@ export function Lane({
             )}
           </div>
         </SortableContext>
-      </motion.div>
-    </div>
+      </div>
+    </motion.div>
   );
 }
