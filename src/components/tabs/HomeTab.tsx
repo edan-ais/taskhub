@@ -134,8 +134,8 @@ export function HomeTab() {
             key={lane}
             initial={false}
             animate={{
-              height: collapsed[lane as LaneType] ? 70 : 'auto', // 70px = header height
-              opacity: collapsed[lane as LaneType] ? 0.9 : 1,
+              height: collapsed[lane as LaneType] ? 72 : 'auto', // header-only height
+              opacity: collapsed[lane as LaneType] ? 0.96 : 1,
             }}
             transition={{ duration: 0.3, ease: 'easeInOut' }}
             className="overflow-hidden"
