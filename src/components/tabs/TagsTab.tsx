@@ -138,9 +138,7 @@ export function TagsTab() {
         .select()
         .single();
       if (error) throw error;
-      if (data) {
-        addTag(data);
-      }
+      if (data) addTag(data);
     } catch (e) {
       console.error("Error adding tag:", e);
     } finally {
@@ -167,10 +165,8 @@ export function TagsTab() {
         .select()
         .single();
       if (error) throw error;
-
-      // Update local store with the canonical updated row
       updateTag(editingTag.id, data);
-      await fetchTags(); // ensure order_index / any defaults are in sync
+      await fetchTags();
     } catch (e) {
       console.error("Error saving tag:", e);
     } finally {
@@ -185,22 +181,18 @@ export function TagsTab() {
     const newIndex = direction === "up" ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= tags.length) return;
 
-    // Local reorder
     const reordered = [...tags];
     const [moved] = reordered.splice(index, 1);
     reordered.splice(newIndex, 0, moved);
-
-    // Update local store right away
     setTags(reordered);
 
-    // Persist order to Supabase
     try {
       await Promise.all(
         reordered.map((t, i) =>
           supabase.from("tags").update({ order_index: i }).eq("id", t.id)
         )
       );
-      await fetchTags(); // reload ordered by order_index so it persists across navigation
+      await fetchTags();
     } catch (e) {
       console.error("Error reordering tags:", e);
     }
@@ -239,9 +231,7 @@ export function TagsTab() {
         .select()
         .single();
       if (error) throw error;
-      if (data) {
-        addDivision(data);
-      }
+      if (data) addDivision(data);
     } catch (e) {
       console.error("Error adding division:", e);
     } finally {
@@ -268,7 +258,6 @@ export function TagsTab() {
         .select()
         .single();
       if (error) throw error;
-
       updateDivision(editingDivision.id, data);
       await fetchDivisions();
     } catch (e) {
@@ -288,7 +277,6 @@ export function TagsTab() {
     const reordered = [...divisions];
     const [moved] = reordered.splice(index, 1);
     reordered.splice(newIndex, 0, moved);
-
     setDivisions(reordered);
 
     try {
@@ -320,7 +308,7 @@ export function TagsTab() {
   };
 
   /* ------------------------------------------------
-     RENDER ITEM (Tags/Divisions)
+     RENDER ITEM
   ------------------------------------------------ */
   const renderItem = (
     item: any,
@@ -344,7 +332,6 @@ export function TagsTab() {
         className="flex items-center justify-between p-3 rounded-lg border-2 transition-all select-none shadow-sm relative bg-slate-50 hover:border-blue-300"
         style={{
           borderColor: isActive ? item.color : "#E2E8F0",
-          // “thick” selection outline without changing layout
           boxShadow: isActive ? `0 0 0 3px ${item.color} inset` : "none",
         }}
       >
@@ -399,21 +386,44 @@ export function TagsTab() {
                 </div>
               </div>
             </div>
+
             <div className="flex items-center gap-1 ml-2 shrink-0">
-              <button
-                onClick={() => onMove(item.id, "up")}
-                className="p-1.5 hover:bg-slate-100 rounded text-slate-500"
-                title="Move left"
-              >
-                <ArrowLeft size={14} />
-              </button>
-              <button
-                onClick={() => onMove(item.id, "down")}
-                className="p-1.5 hover:bg-slate-100 rounded text-slate-500"
-                title="Move right"
-              >
-                <ArrowRight size={14} />
-              </button>
+              {/* MOBILE up/down */}
+              <div className="flex md:hidden items-center gap-1">
+                <button
+                  onClick={() => onMove(item.id, "up")}
+                  className="p-1.5 hover:bg-slate-100 rounded text-slate-500"
+                  title="Move up"
+                >
+                  <ArrowLeft className="rotate-90" size={14} />
+                </button>
+                <button
+                  onClick={() => onMove(item.id, "down")}
+                  className="p-1.5 hover:bg-slate-100 rounded text-slate-500"
+                  title="Move down"
+                >
+                  <ArrowRight className="-rotate-90" size={14} />
+                </button>
+              </div>
+
+              {/* DESKTOP left/right */}
+              <div className="hidden md:flex items-center gap-1">
+                <button
+                  onClick={() => onMove(item.id, "up")}
+                  className="p-1.5 hover:bg-slate-100 rounded text-slate-500"
+                  title="Move left"
+                >
+                  <ArrowLeft size={14} />
+                </button>
+                <button
+                  onClick={() => onMove(item.id, "down")}
+                  className="p-1.5 hover:bg-slate-100 rounded text-slate-500"
+                  title="Move right"
+                >
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+
               <button
                 onClick={() => onStartEdit(item)}
                 className="p-1.5 hover:bg-blue-100 rounded text-blue-600"
@@ -439,7 +449,7 @@ export function TagsTab() {
      RENDER
   ------------------------------------------------ */
   return (
-    <div className="space-y-10">
+    <div className="mt-[100px] md:mt-0 px-4 md:px-6 lg:px-8 space-y-10">
       {/* TAG MANAGEMENT */}
       <div className="bg-white rounded-xl p-6 border-2 border-slate-300 shadow-sm">
         <div className="flex items-center justify-between mb-6">
