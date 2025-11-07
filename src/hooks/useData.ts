@@ -1,22 +1,47 @@
 import { useEffect, useCallback, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAppStore } from '../lib/store';
-import type { Task, Division, Tag, Idea, Lane, Person, InboundEmail } from '../lib/types';
+import type {
+  Task,
+  Division,
+  Tag,
+  Idea,
+  Lane,
+  Person,
+  InboundEmail,
+} from '../lib/types';
 
+/* -------------------------------------------------------------------------- */
+/*                                  useData                                   */
+/* -------------------------------------------------------------------------- */
 export function useData() {
-  const { setTasks, setDivisions, setTags, setIdeas, setPeople, setEmails, updateTask, addTask, removeTask } = useAppStore();
+  const {
+    setTasks,
+    setDivisions,
+    setTags,
+    setIdeas,
+    setPeople,
+    setEmails,
+    updateTask,
+    addTask,
+    removeTask,
+  } = useAppStore();
+
   const [isLoading, setIsLoading] = useState(true);
 
+  /* ------------------------------ FETCH TASKS ----------------------------- */
   const fetchTasks = useCallback(async () => {
     const { data: tasks, error } = await supabase
       .from('tasks')
-      .select(`
+      .select(
+        `
         *,
         tags:task_tags(tag:tags(*)),
         divisions:task_divisions(division:divisions(*)),
         subtasks(*),
         notes(*)
-      `)
+      `
+      )
       .order('order_rank', { ascending: true });
 
     if (error) {
@@ -35,11 +60,12 @@ export function useData() {
     setTasks(formattedTasks);
   }, [setTasks]);
 
+  /* ----------------------------- FETCH DIVISIONS ---------------------------- */
   const fetchDivisions = useCallback(async () => {
     const { data, error } = await supabase
       .from('divisions')
       .select('*')
-      .order('name', { ascending: true });
+      .order('order_index', { ascending: true });
 
     if (error) {
       console.error('Error fetching divisions:', error);
@@ -49,11 +75,12 @@ export function useData() {
     setDivisions(data || []);
   }, [setDivisions]);
 
+  /* ------------------------------- FETCH TAGS ------------------------------ */
   const fetchTags = useCallback(async () => {
     const { data, error } = await supabase
       .from('tags')
       .select('*')
-      .order('name', { ascending: true });
+      .order('order_index', { ascending: true });
 
     if (error) {
       console.error('Error fetching tags:', error);
@@ -63,13 +90,16 @@ export function useData() {
     setTags(data || []);
   }, [setTags]);
 
+  /* ------------------------------ FETCH IDEAS ------------------------------ */
   const fetchIdeas = useCallback(async () => {
     const { data: ideas, error } = await supabase
       .from('ideas')
-      .select(`
+      .select(
+        `
         *,
         tags:idea_tags(tag:tags(*))
-      `)
+      `
+      )
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -85,6 +115,7 @@ export function useData() {
     setIdeas(formattedIdeas);
   }, [setIdeas]);
 
+  /* ------------------------------ FETCH PEOPLE ----------------------------- */
   const fetchPeople = useCallback(async () => {
     const { data, error } = await supabase
       .from('people')
@@ -99,13 +130,16 @@ export function useData() {
     setPeople(data || []);
   }, [setPeople]);
 
+  /* ------------------------------ FETCH EMAILS ----------------------------- */
   const fetchEmails = useCallback(async () => {
     const { data: emails, error } = await supabase
       .from('inbound_emails')
-      .select(`
+      .select(
+        `
         *,
         attachments:email_attachments(*)
-      `)
+      `
+      )
       .order('received_at', { ascending: false });
 
     if (error) {
@@ -121,6 +155,7 @@ export function useData() {
     setEmails(formattedEmails);
   }, [setEmails]);
 
+  /* ------------------------------ LIVE CHANNELS ---------------------------- */
   useEffect(() => {
     const loadAllData = async () => {
       setIsLoading(true);
@@ -130,76 +165,49 @@ export function useData() {
         fetchTags(),
         fetchIdeas(),
         fetchPeople(),
-        fetchEmails()
+        fetchEmails(),
       ]);
       setIsLoading(false);
     };
 
     loadAllData();
 
-    const tasksChannel = supabase
-      .channel('tasks-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, () => {
-        fetchTasks();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, () => {
-        fetchTasks();
-      })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
-        removeTask(payload.old.id);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'subtasks' }, () => {
-        fetchTasks();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, () => {
-        fetchTasks();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_tags' }, () => {
-        fetchTasks();
-      })
-      .subscribe();
+    const channels = [
+      supabase
+        .channel('tasks')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, fetchTasks)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'subtasks' }, fetchTasks)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'task_tags' }, fetchTasks)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'task_divisions' }, fetchTasks)
+        .subscribe(),
 
-    const ideasChannel = supabase
-      .channel('ideas-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ideas' }, () => {
-        fetchIdeas();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ideas' }, () => {
-        fetchIdeas();
-      })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'ideas' }, () => {
-        fetchIdeas();
-      })
-      .subscribe();
+      supabase
+        .channel('tags')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tags' }, fetchTags)
+        .subscribe(),
 
-    const peopleChannel = supabase
-      .channel('people-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'people' }, () => {
-        fetchPeople();
-      })
-      .subscribe();
+      supabase
+        .channel('divisions')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'divisions' }, fetchDivisions)
+        .subscribe(),
 
-    const tagsChannel = supabase
-      .channel('tags-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tags' }, () => {
-        fetchTags();
-      })
-      .subscribe();
+      supabase
+        .channel('ideas')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'ideas' }, fetchIdeas)
+        .subscribe(),
 
-    const emailsChannel = supabase
-      .channel('emails-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'inbound_emails' }, () => {
-        fetchEmails();
-      })
-      .subscribe();
+      supabase
+        .channel('people')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'people' }, fetchPeople)
+        .subscribe(),
 
-    return () => {
-      tasksChannel.unsubscribe();
-      ideasChannel.unsubscribe();
-      peopleChannel.unsubscribe();
-      tagsChannel.unsubscribe();
-      emailsChannel.unsubscribe();
-    };
+      supabase
+        .channel('emails')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'inbound_emails' }, fetchEmails)
+        .subscribe(),
+    ];
+
+    return () => channels.forEach((c) => c.unsubscribe());
   }, [fetchTasks, fetchDivisions, fetchTags, fetchIdeas, fetchPeople, fetchEmails, removeTask]);
 
   return {
@@ -212,6 +220,10 @@ export function useData() {
     isLoading,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/*                             TASK CRUD OPERATIONS                           */
+/* -------------------------------------------------------------------------- */
 
 export async function createTask(data: {
   title: string;
@@ -231,31 +243,19 @@ export async function createTask(data: {
       due_date: data.due_date || null,
       order_rank: data.order_rank || Date.now(),
     })
-    .select(`
+    .select(
+      `
       *,
       tags:task_tags(tag:tags(*)),
       divisions:task_divisions(division:divisions(*)),
       subtasks(*),
       notes(*)
-    `)
+    `
+    )
     .single();
 
   if (error) throw error;
-
-  supabase.from('event_log').insert({
-    entity_type: 'task',
-    entity_id: task.id,
-    action: 'created',
-    changes: { task },
-  });
-
-  return {
-    ...task,
-    tags: task.tags?.map((t: any) => t.tag) || [],
-    divisions: task.divisions?.map((d: any) => d.division) || [],
-    subtasks: task.subtasks || [],
-    notes: task.notes || [],
-  };
+  return formatTask(task);
 }
 
 export async function updateTaskData(id: string, updates: Partial<Task>) {
@@ -263,206 +263,96 @@ export async function updateTaskData(id: string, updates: Partial<Task>) {
     .from('tasks')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id);
-
   if (error) throw error;
-
-  supabase.from('event_log').insert({
-    entity_type: 'task',
-    entity_id: id,
-    action: 'updated',
-    changes: updates,
-  });
 }
 
 export async function deleteTask(id: string) {
   const { error } = await supabase.from('tasks').delete().eq('id', id);
-
   if (error) throw error;
-
-  supabase.from('event_log').insert({
-    entity_type: 'task',
-    entity_id: id,
-    action: 'deleted',
-    changes: {},
-  });
 }
 
 export async function moveTask(id: string, lane: Lane, order_rank: number) {
   const updates: any = { lane, order_rank, updated_at: new Date().toISOString() };
-
   if (lane === 'green') {
     updates.completed_at = new Date().toISOString();
     updates.progress_state = 'completed';
   }
-
   const { error } = await supabase.from('tasks').update(updates).eq('id', id);
-
   if (error) throw error;
-
-  supabase.from('event_log').insert({
-    entity_type: 'task',
-    entity_id: id,
-    action: 'moved',
-    changes: { lane, order_rank },
-  });
 }
 
-export async function createIdea(data: { title: string; description?: string }) {
-  const { data: idea, error } = await supabase
-    .from('ideas')
-    .insert({
-      title: data.title,
-      description: data.description || '',
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  await supabase.from('event_log').insert({
-    entity_type: 'idea',
-    entity_id: idea.id,
-    action: 'created',
-    changes: { idea },
-  });
-
-  return idea;
-}
-
-export async function updateIdeaData(id: string, updates: Partial<Idea>) {
-  const { error } = await supabase
-    .from('ideas')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', id);
-
-  if (error) throw error;
-
-  await supabase.from('event_log').insert({
-    entity_type: 'idea',
-    entity_id: id,
-    action: 'updated',
-    changes: updates,
-  });
-}
-
-export async function deleteIdea(id: string) {
-  const { error } = await supabase.from('ideas').delete().eq('id', id);
-
-  if (error) throw error;
-
-  supabase.from('event_log').insert({
-    entity_type: 'idea',
-    entity_id: id,
-    action: 'deleted',
-    changes: {},
-  });
-}
-
-export async function addTagToTask(taskId: string, tagId: string) {
-  const { error } = await supabase.from('task_tags').insert({ task_id: taskId, tag_id: tagId });
-
-  if (error) throw error;
-
-  await supabase.from('event_log').insert({
-    entity_type: 'task',
-    entity_id: taskId,
-    action: 'tagged',
-    changes: { tag_id: tagId },
-  });
-}
-
-export async function removeTagFromTask(taskId: string, tagId: string) {
-  const { error } = await supabase
-    .from('task_tags')
-    .delete()
-    .eq('task_id', taskId)
-    .eq('tag_id', tagId);
-
-  if (error) throw error;
-
-  await supabase.from('event_log').insert({
-    entity_type: 'task',
-    entity_id: taskId,
-    action: 'untagged',
-    changes: { tag_id: tagId },
-  });
-}
-
-export async function createSubtask(taskId: string, title: string, order_rank?: number) {
-  const { data: subtask, error } = await supabase
-    .from('subtasks')
-    .insert({
-      task_id: taskId,
-      title,
-      order_rank: order_rank || Date.now(),
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return subtask;
-}
+/* -------------------------------------------------------------------------- */
+/*                             SUBTASK & NOTES CRUD                           */
+/* -------------------------------------------------------------------------- */
 
 export async function updateSubtask(id: string, updates: any) {
   const { error } = await supabase
     .from('subtasks')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id);
-
   if (error) throw error;
 }
 
-export async function deleteSubtask(id: string) {
-  const { error } = await supabase.from('subtasks').delete().eq('id', id);
-  if (error) throw error;
-}
+/* -------------------------------------------------------------------------- */
+/*                             TAG & DIVISION CRUD                            */
+/* -------------------------------------------------------------------------- */
 
-export async function createNote(taskId: string, content: string) {
-  const { data: note, error } = await supabase
-    .from('notes')
-    .insert({ task_id: taskId, content })
+export async function createTag(name: string, color: string) {
+  const { data, error } = await supabase
+    .from('tags')
+    .insert({ name, color, order_index: Date.now() })
     .select()
     .single();
-
   if (error) throw error;
-  return note;
+  return data;
 }
 
-export async function updateNote(id: string, content: string) {
+export async function updateTagData(id: string, updates: Partial<Tag>) {
   const { error } = await supabase
-    .from('notes')
-    .update({ content, updated_at: new Date().toISOString() })
-    .eq('id', id);
-
-  if (error) throw error;
-}
-
-export async function deleteNote(id: string) {
-  const { error } = await supabase.from('notes').delete().eq('id', id);
-  if (error) throw error;
-}
-
-export async function createPerson(name: string, email?: string) {
-  const { data: person, error } = await supabase
-    .from('people')
-    .insert({ name, email: email || null })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return person;
-}
-
-export async function updatePersonData(id: string, updates: { name?: string; email?: string }) {
-  const { error } = await supabase
-    .from('people')
+    .from('tags')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id);
-
   if (error) throw error;
 }
 
-export async function deletePerson(id: string) {
-  const { error } = await supabase.from('people').delete().eq('id', id);
+export async function deleteTag(id: string) {
+  const { error } = await supabase.from('tags').delete().eq('id', id);
   if (error) throw error;
+}
+
+export async function createDivision(name: string, color: string) {
+  const { data, error } = await supabase
+    .from('divisions')
+    .insert({ name, color, order_index: Date.now() })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateDivisionData(id: string, updates: Partial<Division>) {
+  const { error } = await supabase
+    .from('divisions')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteDivision(id: string) {
+  const { error } = await supabase.from('divisions').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                   HELPERS                                  */
+/* -------------------------------------------------------------------------- */
+
+function formatTask(task: any): Task {
+  return {
+    ...task,
+    tags: task.tags?.map((t: any) => t.tag) || [],
+    divisions: task.divisions?.map((d: any) => d.division) || [],
+    subtasks: task.subtasks || [],
+    notes: task.notes || [],
+  };
 }
