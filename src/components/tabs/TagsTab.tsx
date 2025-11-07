@@ -5,8 +5,7 @@ import {
   Plus,
   Edit2,
   Trash2,
-  X,
-  Check,
+  GripVertical,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
@@ -23,7 +22,9 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// --- SORTABLE ITEM (for both tags & divisions) ---
+/* ============================
+   SORTABLE ITEM COMPONENT
+============================ */
 function SortableItem({ item, onEdit, onDelete, onClick, isActive, type }: any) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -32,26 +33,40 @@ function SortableItem({ item, onEdit, onDelete, onClick, isActive, type }: any) 
     <div
       ref={setNodeRef}
       style={style}
-      onClick={() => onClick?.(item.id)}
-      className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all ${
+      className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all select-none shadow-sm ${
         isActive
-          ? 'bg-blue-50 border-blue-400'
-          : 'bg-slate-50 border-slate-200 hover:border-blue-300'
+          ? 'border-4 border-blue-400 bg-blue-50'
+          : 'border-slate-200 bg-slate-50 hover:border-blue-300'
       }`}
-      {...attributes}
-      {...listeners}
     >
-      <div className="flex-1 flex items-center gap-2">
+      {/* Drag handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        onClick={(e) => e.stopPropagation()}
+        className="p-1.5 mr-2 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing"
+        title="Drag to reorder"
+      >
+        <GripVertical size={16} />
+      </div>
+
+      {/* Clickable body */}
+      <div
+        className="flex-1 flex items-center gap-2 cursor-pointer"
+        onClick={() => onClick?.(item.id)}
+      >
         <div
           className="w-6 h-6 rounded-full border-2 shrink-0"
           style={{ backgroundColor: item.color, borderColor: item.color }}
         />
-        <div>
-          <div className="font-medium text-slate-800">{item.name}</div>
+        <div className="min-w-0">
+          <div className="font-medium text-slate-800 truncate">{item.name}</div>
           <div className="text-xs text-slate-500">{item.taskCount} task(s)</div>
         </div>
       </div>
-      <div className="flex items-center gap-1">
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-1 ml-2 shrink-0">
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -77,6 +92,9 @@ function SortableItem({ item, onEdit, onDelete, onClick, isActive, type }: any) 
   );
 }
 
+/* ============================
+   TAGS TAB MAIN COMPONENT
+============================ */
 export function TagsTab() {
   const {
     tasks,
@@ -84,9 +102,9 @@ export function TagsTab() {
     divisions,
     searchQuery,
     hideCompleted,
+    addTag,
     updateTag,
     removeTag,
-    addTag,
     addDivision,
     updateDivision,
     removeDivision,
@@ -96,19 +114,13 @@ export function TagsTab() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [selectedDivision, setSelectedDivision] = useState<string | null>(null);
 
-  const [showAddTag, setShowAddTag] = useState(false);
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#3B82F6');
-  const [editingTag, setEditingTag] = useState<any>(null);
-  const [editTagName, setEditTagName] = useState('');
-  const [editTagColor, setEditTagColor] = useState('');
+  const [showAddTag, setShowAddTag] = useState(false);
 
-  const [showAddDivision, setShowAddDivision] = useState(false);
   const [newDivisionName, setNewDivisionName] = useState('');
   const [newDivisionColor, setNewDivisionColor] = useState('#8B5CF6');
-  const [editingDivision, setEditingDivision] = useState<any>(null);
-  const [editDivisionName, setEditDivisionName] = useState('');
-  const [editDivisionColor, setEditDivisionColor] = useState('');
+  const [showAddDivision, setShowAddDivision] = useState(false);
 
   const [collapsedLanes, setCollapsedLanes] = useState<Record<string, boolean>>({
     red: false,
@@ -116,7 +128,9 @@ export function TagsTab() {
     green: false,
   });
 
-  // ---- Filtered + Grouped Tasks ----
+  /* ============================
+     FILTERED TASKS
+  ============================ */
   const filteredTasks = tasks.filter(
     (task) =>
       (task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -141,31 +155,21 @@ export function TagsTab() {
   const toggleLane = (lane: string) =>
     setCollapsedLanes((prev) => ({ ...prev, [lane]: !prev[lane] }));
 
-  // ---- TAG CRUD ----
+  /* ============================
+     TAGS CRUD
+  ============================ */
   const handleAddTag = async () => {
     if (!newTagName.trim()) return;
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('tags')
       .insert({ name: newTagName, color: newTagColor, order_index: tags.length })
       .select()
       .single();
-    if (data && !error) {
+    if (data) {
       addTag(data);
       setNewTagName('');
       setNewTagColor('#3B82F6');
       setShowAddTag(false);
-    }
-  };
-
-  const handleSaveTag = async () => {
-    if (!editingTag) return;
-    const { error } = await supabase
-      .from('tags')
-      .update({ name: editTagName, color: editTagColor })
-      .eq('id', editingTag.id);
-    if (!error) {
-      updateTag(editingTag.id, { name: editTagName, color: editTagColor });
-      setEditingTag(null);
     }
   };
 
@@ -192,31 +196,21 @@ export function TagsTab() {
     }
   };
 
-  // ---- DIVISION CRUD ----
+  /* ============================
+     DIVISIONS CRUD
+  ============================ */
   const handleAddDivision = async () => {
     if (!newDivisionName.trim()) return;
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('divisions')
       .insert({ name: newDivisionName, color: newDivisionColor, order_index: divisions.length })
       .select()
       .single();
-    if (data && !error) {
+    if (data) {
       addDivision(data);
       setNewDivisionName('');
       setNewDivisionColor('#8B5CF6');
       setShowAddDivision(false);
-    }
-  };
-
-  const handleSaveDivision = async () => {
-    if (!editingDivision) return;
-    const { error } = await supabase
-      .from('divisions')
-      .update({ name: editDivisionName, color: editDivisionColor })
-      .eq('id', editingDivision.id);
-    if (!error) {
-      updateDivision(editingDivision.id, { name: editDivisionName, color: editDivisionColor });
-      setEditingDivision(null);
     }
   };
 
@@ -245,10 +239,12 @@ export function TagsTab() {
     }
   };
 
-  // ---- UI Render ----
+  /* ============================
+     RENDER
+  ============================ */
   return (
     <div className="space-y-10">
-      {/* --- TAGS --- */}
+      {/* TAG MANAGEMENT */}
       <div className="bg-white rounded-xl p-6 border-2 border-slate-300 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -283,12 +279,6 @@ export function TagsTab() {
             >
               Add
             </button>
-            <button
-              onClick={() => setShowAddTag(false)}
-              className="px-4 h-10 bg-slate-200 text-slate-700 rounded-lg border-2 border-slate-300"
-            >
-              Cancel
-            </button>
           </div>
         )}
 
@@ -304,11 +294,7 @@ export function TagsTab() {
                       task.tags?.some((tg) => tg.id === t.id)
                     ).length,
                   }}
-                  onEdit={(item: any) => {
-                    setEditingTag(item);
-                    setEditTagName(item.name);
-                    setEditTagColor(item.color);
-                  }}
+                  onEdit={() => {}}
                   onDelete={handleDeleteTag}
                   onClick={(id: string) =>
                     setSelectedTag(selectedTag === id ? null : id)
@@ -322,7 +308,7 @@ export function TagsTab() {
         </DndContext>
       </div>
 
-      {/* --- DIVISIONS --- */}
+      {/* DIVISION MANAGEMENT */}
       <div className="bg-white rounded-xl p-6 border-2 border-slate-300 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -357,12 +343,6 @@ export function TagsTab() {
             >
               Add
             </button>
-            <button
-              onClick={() => setShowAddDivision(false)}
-              className="px-4 h-10 bg-slate-200 text-slate-700 rounded-lg border-2 border-slate-300"
-            >
-              Cancel
-            </button>
           </div>
         )}
 
@@ -378,11 +358,7 @@ export function TagsTab() {
                       task.divisions?.some((dv) => dv.id === d.id)
                     ).length,
                   }}
-                  onEdit={(item: any) => {
-                    setEditingDivision(item);
-                    setEditDivisionName(item.name);
-                    setEditDivisionColor(item.color);
-                  }}
+                  onEdit={() => {}}
                   onDelete={handleDeleteDivision}
                   onClick={(id: string) =>
                     setSelectedDivision(selectedDivision === id ? null : id)
@@ -396,7 +372,7 @@ export function TagsTab() {
         </DndContext>
       </div>
 
-      {/* --- TASK LANE GROUPINGS --- */}
+      {/* TASK LANES */}
       {(['red', 'yellow', 'green'] as const).map((lane) => {
         const laneTasks = groupedTasks[lane];
         const laneTitles = { red: 'Pending', yellow: 'In Progress', green: 'Completed' };
