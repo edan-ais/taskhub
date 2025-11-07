@@ -48,7 +48,7 @@ export function Lane({
       ref={setNodeRef}
       initial={false}
       animate={{
-        maxHeight: isCollapsed ? 84 : 1000, // ~header height collapsed
+        maxHeight: isCollapsed ? 84 : 1000, // collapses whole lane, not just tasks
       }}
       transition={{ duration: 0.3, ease: "easeInOut" }}
       className={`flex flex-col min-h-[84px] border-2 border-slate-300 rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 ${
@@ -102,11 +102,9 @@ export function Lane({
         </div>
       </div>
 
-      {/* TASK CONTENT */}
-<div
-  className={`flex-1 min-h-full overflow-visible p-4 ${laneColors[lane]} border-t-0`}
->
-
+      {/* TASK CONTENT (no internal scrollbar, fills full column color) */}
+      <div
+        className={`flex-1 min-h-full overflow-visible p-4 ${laneColors[lane]} border-t-0`}
       >
         <SortableContext
           items={tasks.map((t) => t.id)}
