@@ -51,7 +51,13 @@ export function Lane({
       }`}
     >
       {/* HEADER */}
-      <div className="flex-shrink-0 bg-white border-b border-slate-300 p-4">
+      <div
+        className={`flex-shrink-0 bg-white p-4 transition-all duration-300 ${
+          isCollapsed
+            ? 'rounded-b-xl border border-slate-300 shadow-sm'
+            : 'border-b border-slate-300'
+        }`}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className={`w-3 h-3 rounded-full ${headerColors[lane]}`} />
