@@ -132,9 +132,9 @@ export function HomeTab() {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      {/* mobile: push content down to clear 2-row header; desktop: keep as-is */}
-      <div className="pt-[145px] md:pt-0">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
+      {/* more top padding on mobile to clear the taller header */}
+      <div className="pt-[145px] md:pt-20">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[calc(100vh-145px)] md:h-[calc(100vh-80px)]">
           {[
             { lane: "red", title: "Master / To-Do", color: "red", tasks: redTasks },
             { lane: "yellow", title: "Pending Approval", color: "yellow", tasks: yellowTasks },
