@@ -144,6 +144,7 @@ export function PeopleTab() {
 
   return (
     <div className="space-y-8">
+      {/* --- TEAM MANAGEMENT HEADER --- */}
       <div className="bg-white rounded-xl p-6 border-2 border-slate-300 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -159,6 +160,7 @@ export function PeopleTab() {
           </button>
         </div>
 
+        {/* --- ADD PERSON FIELD --- */}
         {showAddPerson && (
           <div className="mb-6 p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
             <div className="flex gap-3">
@@ -190,33 +192,34 @@ export function PeopleTab() {
           </div>
         )}
 
-        {/* People Filter Buttons */}
+        {/* --- PEOPLE FILTER BUTTONS --- */}
         <div>
           <h3 className="text-sm font-semibold text-slate-600 mb-3">Team Members</h3>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-4">
             {/* Unassigned first */}
             {unassignedTasks.length > 0 && (
               <button
                 onClick={() => setSelectedPerson(null)}
-                className={`min-w-[220px] px-6 py-3.5 rounded-xl font-medium border-2 flex items-center justify-between transition-all ${
+                className={`min-w-[260px] px-8 py-4 rounded-xl font-medium border-2 flex items-center justify-between transition-all ${
                   selectedPerson === null
                     ? 'bg-slate-50 border-slate-400 shadow-sm'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold bg-slate-100 text-slate-700 rounded-full px-2 py-0.5">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-semibold bg-slate-100 text-slate-700 rounded-full px-2.5 py-0.5">
                     {unassignedTasks.length}
                   </span>
-                  <span>Unassigned</span>
+                  <span className="font-medium text-slate-700">Unassigned</span>
                 </div>
               </button>
             )}
 
+            {/* People */}
             {peopleWithCounts.map((person) => (
               <div
                 key={person.id}
-                className={`min-w-[220px] px-6 py-3.5 rounded-xl border-2 flex items-center justify-between transition-all ${
+                className={`min-w-[260px] px-8 py-4 rounded-xl border-2 flex items-center justify-between transition-all ${
                   selectedPerson === person.name
                     ? 'bg-blue-50 border-blue-400 shadow-sm'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
@@ -242,19 +245,19 @@ export function PeopleTab() {
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold rounded-full px-2 py-0.5 bg-slate-100 text-slate-700">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-semibold rounded-full px-2.5 py-0.5 bg-slate-100 text-slate-700">
                         {person.taskCount}
                       </span>
                       <span className="font-medium truncate">{person.name}</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleStartEdit(person.name);
                         }}
-                        className="p-1 hover:bg-blue-100 rounded text-blue-600"
+                        className="p-1.5 hover:bg-blue-100 rounded text-blue-600"
                       >
                         <Edit2 size={14} />
                       </button>
@@ -263,7 +266,7 @@ export function PeopleTab() {
                           e.stopPropagation();
                           handleDeletePerson(person.name);
                         }}
-                        className="p-1 hover:bg-red-100 rounded text-red-600"
+                        className="p-1.5 hover:bg-red-100 rounded text-red-600"
                       >
                         <Trash2 size={14} />
                       </button>
