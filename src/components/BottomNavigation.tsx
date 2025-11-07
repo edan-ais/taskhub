@@ -19,22 +19,26 @@ export function BottomNavigation() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t-2 border-slate-200 shadow-lg">
-      <div className="max-w-[1920px] mx-auto px-2 relative">
-        <div className="flex items-center justify-around h-16 relative overflow-hidden">
-          {/* Sliding pill controlled by x transform */}
+      <div className="max-w-[1920px] mx-auto px-2">
+        {/* this is the container the pill will align to */}
+        <div className="flex items-center justify-around h-16 relative">
+          {/* sliding pill, NO glow, fixed vertical position */}
           <motion.div
-            className="absolute top-[14%] left-0 w-[calc(100%/6-0.5rem)] h-[72%] rounded-2xl pointer-events-none"
+            // single element that moves left/right
+            className="absolute top-2 bottom-2 rounded-2xl pointer-events-none"
             style={{
-              backgroundColor: `${tabs[activeIndex]?.color}33`,
-              boxShadow: `0 0 10px 3px ${tabs[activeIndex]?.color}40`,
+              // width = one tab
+              width: `calc(100% / ${tabs.length})`,
+              backgroundColor: `${tabs[activeIndex]?.color}22`, // subtle tint, no glow
             }}
             animate={{
-              x: `calc(${activeIndex} * (100% / ${tabs.length}))`,
+              // move exactly one tab at a time
+              left: `calc(${activeIndex} * (100% / ${tabs.length}))`,
             }}
             transition={{
               type: 'spring',
-              stiffness: 250,
-              damping: 25,
+              stiffness: 260,
+              damping: 28,
             }}
           />
 
