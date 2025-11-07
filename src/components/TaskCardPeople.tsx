@@ -36,9 +36,7 @@ export function TaskCardPeople({ task }: TaskCardPeopleProps) {
   };
 
   const isOverdue =
-    task.due_date &&
-    isPast(parseISO(task.due_date)) &&
-    task.lane !== 'green';
+    task.due_date && isPast(parseISO(task.due_date)) && task.lane !== 'green';
 
   const completedSubtasks =
     task.subtasks?.filter((st) => st.progress_state === 'completed').length || 0;
@@ -84,9 +82,9 @@ export function TaskCardPeople({ task }: TaskCardPeopleProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
       onClick={() => setSelectedTask(task)}
-      className={`group relative rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer border-2 flex flex-col justify-between h-[260px] ${laneBorderColors[task.lane]} ${
-        isOverdue ? 'ring-2 ring-red-500' : ''
-      }`}
+      className={`group relative rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer border-2 flex flex-col justify-between h-[260px] ${
+        laneBorderColors[task.lane]
+      } ${isOverdue ? 'ring-2 ring-red-500' : ''}`}
     >
       {/* Top Controls */}
       <div className="absolute top-2 right-2 flex gap-1 items-center z-10">
@@ -156,6 +154,34 @@ export function TaskCardPeople({ task }: TaskCardPeopleProps) {
               </p>
             ) : (
               <div className="text-sm text-transparent mt-1 select-none">-</div>
+            )}
+          </div>
+
+          {/* Divisions */}
+          <div className="min-h-[24px]">
+            {task.divisions && task.divisions.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {task.divisions.slice(0, 3).map((division) => (
+                  <span
+                    key={division.id}
+                    className="text-xs px-2 py-1 rounded-full border font-medium"
+                    style={{
+                      borderColor: division.color,
+                      backgroundColor: `${division.color}20`,
+                      color: division.color,
+                    }}
+                  >
+                    {division.name}
+                  </span>
+                ))}
+                {task.divisions.length > 3 && (
+                  <span className="text-xs text-slate-400">
+                    +{task.divisions.length - 3} more
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-transparent select-none">-</div>
             )}
           </div>
 
