@@ -40,7 +40,6 @@ export function IdeasTab() {
   const [newIdeaDesc, setNewIdeaDesc] = useState('');
   const [newAttachments, setNewAttachments] = useState<File[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<IdeaStatus | 'all'>('all');
-  const [showEmails, setShowEmails] = useState(true);
   const [editingIdea, setEditingIdea] = useState<Idea | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editDesc, setEditDesc] = useState('');
@@ -166,7 +165,7 @@ export function IdeasTab() {
 
   return (
     <div className="mt-[100px] md:mt-0 px-4 md:px-6 lg:px-8 space-y-6">
-      {/* New Idea Input */}
+      {/* NEW IDEA INPUT */}
       <div className="bg-white rounded-xl p-6 border-2 border-slate-300">
         <h2 className="text-2xl font-bold text-slate-800 mb-4 flex items-center gap-2">
           <Lightbulb size={28} className="text-amber-500" />
@@ -225,7 +224,7 @@ export function IdeasTab() {
         </div>
       </div>
 
-      {/* Ideas Grid */}
+      {/* IDEAS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredIdeas.map((idea) => (
           <motion.div
@@ -286,11 +285,11 @@ export function IdeasTab() {
         ))}
       </div>
 
-      {/* Full Idea Modal */}
+      {/* FULL IDEA MODAL */}
       <AnimatePresence>
         {activeIdea && (
           <motion.div
-            className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
+            className="fixed left-0 right-0 bottom-0 top-[100px] md:top-0 z-[999] bg-black bg-opacity-40 flex items-center justify-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
