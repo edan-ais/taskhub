@@ -21,30 +21,33 @@ export function BottomNavigation() {
         <div className="flex items-center justify-around h-16">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
+
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className="relative flex flex-col items-center justify-center flex-1 h-full transition-colors"
+                className="relative flex flex-col items-center justify-center flex-1 h-full transition-colors overflow-hidden"
               >
-                {/* Highlight bar perfectly above tab */}
+                {/* Animated pill background for active tab */}
                 {isActive && (
                   <motion.div
-                    layoutId="activeTabIndicator"
-                    className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-[3px] rounded-full"
-                    style={{ backgroundColor: tab.color }}
-                    transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    layoutId="activeTabPill"
+                    className="absolute inset-0 mx-2 my-1 rounded-2xl"
+                    style={{
+                      backgroundColor: `${tab.color}33`, // ~20% opacity version
+                    }}
+                    transition={{ type: 'spring', bounce: 0.25, duration: 0.5 }}
                   />
                 )}
 
                 <div
-                  className="transition-colors"
+                  className="relative z-10 transition-colors"
                   style={{ color: isActive ? tab.color : '#64748B' }}
                 >
                   {tab.icon}
                 </div>
                 <span
-                  className="text-xs mt-1 font-medium transition-colors"
+                  className="relative z-10 text-xs mt-1 font-medium transition-colors"
                   style={{ color: isActive ? tab.color : '#64748B' }}
                 >
                   {tab.label}
