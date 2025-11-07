@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Lightbulb,
   Plus,
-  ArrowRight,
   Trash2,
   Paperclip,
   Edit2,
   X,
   Save,
+  Link2,
+  User,
+  Tag as TagIcon,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, parseISO } from 'date-fns';
@@ -15,7 +17,6 @@ import { useAppStore } from '../../lib/store';
 import {
   createIdea,
   updateIdeaData,
-  createTask,
   deleteIdea,
 } from '../../hooks/useData';
 import type { Idea, IdeaStatus } from '../../lib/types';
@@ -24,6 +25,8 @@ import { supabase } from '../../lib/supabase';
 export function IdeasTab() {
   const {
     ideas,
+    people,
+    tags,
     searchQuery,
     removeIdea,
     updateIdea,
@@ -33,31 +36,40 @@ export function IdeasTab() {
 
   const [newIdeaTitle, setNewIdeaTitle] = useState('');
   const [newIdeaDesc, setNewIdeaDesc] = useState('');
+  const [newIdeaLinks, setNewIdeaLinks] = useState('');
   const [newAttachments, setNewAttachments] = useState<File[]>([]);
-  const [selectedStatus, setSelectedStatus] = useState<IdeaStatus | 'all'>('all');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [submittedBy, setSubmittedBy] = useState('');
+  const [directedTo, setDirectedTo] = useState('');
   const [activeIdea, setActiveIdea] = useState<Idea | null>(null);
   const [editingIdea, setEditingIdea] = useState<Idea | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editDesc, setEditDesc] = useState('');
+  const [editLinks, setEditLinks] = useState('');
+  const [editTags, setEditTags] = useState<string[]>([]);
+  const [editFiles, setEditFiles] = useState<string[]>([]);
 
   // ───────────────────────────────
-  // Filtering + Sorting
+  // Scroll lock for modals
   // ───────────────────────────────
-  const filteredIdeas = ideas
-    .filter((idea) => {
-      const matchesSearch =
-        idea.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        idea.description.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus =
-        selectedStatus === 'all' || idea.status === selectedStatus;
-      const matchesCompleted = !hideCompleted || idea.status !== 'completed';
-      return matchesSearch && matchesStatus && matchesCompleted;
-    })
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  useEffect(() => {
+    document.body.style.overflow =
+      activeIdea || editingIdea ? 'hidden' : 'auto';
+  }, [activeIdea, editingIdea]);
 
   // ───────────────────────────────
-  // Core Handlers
+  // Handlers
   // ───────────────────────────────
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) setNewAttachments(Array.from(e.target.files));
+  };
+
+  const handleTagToggle = (tagId: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+    );
+  };
+
   const handleCreateIdea = async () => {
     if (!newIdeaTitle.trim()) return;
     const uploadedUrls: string[] = [];
@@ -66,115 +78,213 @@ export function IdeasTab() {
         .from('ideas_attachments')
         .upload(`${Date.now()}-${file.name}`, file);
       if (!error && data) {
-        const publicUrl = supabase.storage.from('ideas_attachments').getPublicUrl(data.path)
-          .data.publicUrl;
+        const publicUrl = supabase.storage
+          .from('ideas_attachments')
+          .getPublicUrl(data.path).data.publicUrl;
         uploadedUrls.push(publicUrl);
       }
     }
-    await createIdea({ title: newIdeaTitle, description: newIdeaDesc, attachments: uploadedUrls });
+
+    const { data: newIdea } = await supabase
+      .from('ideas')
+      .insert([
+        {
+          title: newIdeaTitle,
+          description: newIdeaDesc,
+          links: newIdeaLinks,
+          attachments: uploadedUrls,
+          tag_ids: selectedTags,
+          submitted_by: submittedBy || null,
+          directed_to: directedTo || null,
+          status: 'not_addressed',
+        },
+      ])
+      .select()
+      .single();
+
+    if (newIdea) updateIdea(newIdea.id, newIdea);
     setNewIdeaTitle('');
     setNewIdeaDesc('');
+    setNewIdeaLinks('');
+    setSelectedTags([]);
     setNewAttachments([]);
+    setSubmittedBy('');
+    setDirectedTo('');
   };
 
   const handleDelete = async (id: string) => {
-    showDeleteConfirmation(
-      'Delete Idea',
-      'Are you sure you want to delete this idea?',
-      async () => {
-        removeIdea(id);
-        await deleteIdea(id);
-      }
-    );
+    showDeleteConfirmation('Delete Idea', 'Are you sure?', async () => {
+      removeIdea(id);
+      await deleteIdea(id);
+    });
   };
 
   const handleEditOpen = (idea: Idea) => {
     setEditingIdea(idea);
     setEditTitle(idea.title);
     setEditDesc(idea.description || '');
+    setEditLinks(idea.links || '');
+    setEditTags(idea.tag_ids || []);
+    setEditFiles(idea.attachments || []);
   };
 
   const handleEditSave = async () => {
     if (!editingIdea) return;
-    await updateIdeaData(editingIdea.id, { title: editTitle, description: editDesc });
-    updateIdea(editingIdea.id, { title: editTitle, description: editDesc });
+    await updateIdeaData(editingIdea.id, {
+      title: editTitle,
+      description: editDesc,
+      links: editLinks,
+      tag_ids: editTags,
+    });
+    updateIdea(editingIdea.id, {
+      title: editTitle,
+      description: editDesc,
+      links: editLinks,
+      tag_ids: editTags,
+    });
     setEditingIdea(null);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) setNewAttachments(Array.from(e.target.files));
+  const renderLinks = (links: string) => {
+    return links
+      .split(/\s+/)
+      .filter((l) => l.startsWith('http'))
+      .map((link, i) => (
+        <a
+          key={i}
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-blue-600 underline text-sm break-all"
+        >
+          {link}
+        </a>
+      ));
   };
 
-  const renderDescription = (text: string) => {
-    const parts = text.split(/(https?:\/\/[^\s]+)/g);
-    return (
-      <>
-        {parts.map((part, i) =>
-          /^https?:\/\//.test(part) ? (
-            <a
-              key={i}
-              href={part}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 underline break-all"
-            >
-              {part}
-            </a>
-          ) : (
-            <span key={i}>{part}</span>
-          )
-        )}
-      </>
+  const filteredIdeas = ideas
+    .filter((i) => {
+      const q = searchQuery.toLowerCase();
+      const matches =
+        i.title.toLowerCase().includes(q) ||
+        i.description.toLowerCase().includes(q);
+      return matches && (!hideCompleted || i.status !== 'completed');
+    })
+    .sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
-  };
 
   // ───────────────────────────────
-  // UI
+  // JSX
   // ───────────────────────────────
   return (
     <div className="mt-[100px] md:mt-0 px-4 md:px-6 lg:px-8 space-y-6">
       {/* NEW IDEA */}
-      <div className="bg-white rounded-xl p-6 border-2 border-slate-300">
+      <div className="bg-white rounded-xl p-6 border-2 border-slate-300 shadow-sm">
         <h2 className="text-2xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <Lightbulb className="text-amber-500 drop-shadow-lg" size={32} />
+          <Lightbulb size={32} className="text-amber-500 drop-shadow-md" />
           Ideas & Requests
         </h2>
 
-        <div className="bg-amber-50 rounded-lg border-2 border-amber-200 p-4 space-y-3">
+        <div className="space-y-3 bg-amber-50 border-2 border-amber-200 rounded-lg p-4">
           <input
+            type="text"
             value={newIdeaTitle}
             onChange={(e) => setNewIdeaTitle(e.target.value)}
-            placeholder="New idea title..."
-            className="w-full px-4 py-2 rounded-lg border-2 border-amber-300 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+            placeholder="Idea title..."
+            className="w-full px-4 py-2 rounded-lg border-2 border-amber-300 focus:ring-2 focus:ring-amber-500 bg-white"
           />
           <textarea
             value={newIdeaDesc}
             onChange={(e) => setNewIdeaDesc(e.target.value)}
-            placeholder="Describe your idea..."
             rows={3}
-            className="w-full px-4 py-2 rounded-lg border-2 border-amber-300 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+            placeholder="Describe your idea..."
+            className="w-full px-4 py-2 rounded-lg border-2 border-amber-300 focus:ring-2 focus:ring-amber-500 bg-white"
           />
-          <label className="flex items-center justify-center w-full border-2 border-dashed border-amber-300 rounded-lg p-3 bg-white hover:bg-amber-50 cursor-pointer transition-all">
-            <Paperclip size={18} className="text-amber-500 mr-2" />
-            <span className="font-medium">Attach files or images</span>
-            <input type="file" multiple className="hidden" onChange={handleFileChange} />
-          </label>
-          {newAttachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-2">
-              {newAttachments.map((f, i) => (
-                <div
-                  key={i}
-                  className="px-3 py-1 bg-white border border-slate-300 rounded-lg text-xs text-slate-700"
+          <textarea
+            value={newIdeaLinks}
+            onChange={(e) => setNewIdeaLinks(e.target.value)}
+            rows={2}
+            placeholder="Add any relevant links (one per line)..."
+            className="w-full px-4 py-2 rounded-lg border-2 border-blue-300 focus:ring-2 focus:ring-blue-500 bg-white"
+          />
+
+          {/* People Selection */}
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="flex-1">
+              <label className="text-sm font-medium text-slate-700 flex items-center gap-1 mb-1">
+                <User size={14} /> Submitted by
+              </label>
+              <select
+                value={submittedBy}
+                onChange={(e) => setSubmittedBy(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border-2 border-slate-300 focus:ring-2 focus:ring-slate-500 bg-white"
+              >
+                <option value="">Select person</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="text-sm font-medium text-slate-700 flex items-center gap-1 mb-1">
+                <User size={14} /> Directed to
+              </label>
+              <select
+                value={directedTo}
+                onChange={(e) => setDirectedTo(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border-2 border-slate-300 focus:ring-2 focus:ring-slate-500 bg-white"
+              >
+                <option value="">Select person</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="text-sm font-medium text-slate-700 flex items-center gap-1 mb-1">
+              <TagIcon size={14} /> Tags
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {tags.map((tag) => (
+                <button
+                  key={tag.id}
+                  onClick={() => handleTagToggle(tag.id)}
+                  className={`text-xs px-2 py-1 rounded-full border-2 ${
+                    selectedTags.includes(tag.id)
+                      ? 'text-white'
+                      : 'text-slate-700'
+                  }`}
+                  style={{
+                    backgroundColor: selectedTags.includes(tag.id)
+                      ? tag.color
+                      : 'white',
+                    borderColor: tag.color,
+                  }}
                 >
-                  <Paperclip size={12} className="inline mr-1" />
-                  {f.name}
-                </div>
+                  {tag.name}
+                </button>
               ))}
             </div>
-          )}
+          </div>
+
+          {/* File Upload */}
+          <label className="flex items-center justify-center w-full border-2 border-dashed border-amber-300 rounded-lg p-3 bg-white hover:bg-amber-50 cursor-pointer transition-all">
+            <Paperclip size={18} className="text-amber-500 mr-2" />
+            <span className="font-medium">Attach files</span>
+            <input type="file" multiple className="hidden" onChange={handleFileChange} />
+          </label>
+
           <button
             onClick={handleCreateIdea}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-600 text-white rounded-lg border-2 border-amber-700 hover:bg-amber-700 transition-all font-medium"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-600 text-white rounded-lg border-2 border-amber-700 hover:bg-amber-700 font-medium"
           >
             <Plus size={18} />
             Add Idea
@@ -188,32 +298,16 @@ export function IdeasTab() {
           <motion.div
             key={idea.id}
             whileHover={{ y: -2 }}
-            className="bg-white rounded-xl p-5 border-2 border-slate-300 shadow-sm hover:shadow-md cursor-pointer transition-all"
+            className="bg-white rounded-xl p-5 border-2 border-slate-300 shadow-sm hover:shadow-md cursor-pointer transition-all relative"
             onClick={() => setActiveIdea(idea)}
           >
             <div className="flex justify-between items-start mb-3">
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0">
-                  <div
-                    className={`w-10 h-10 flex items-center justify-center rounded-full shadow-sm ${
-                      idea.status === 'not_addressed'
-                        ? 'bg-red-100'
-                        : idea.status === 'in_progress'
-                        ? 'bg-amber-100'
-                        : 'bg-green-100'
-                    }`}
-                  >
-                    <Lightbulb
-                      size={22}
-                      className={`${
-                        idea.status === 'not_addressed'
-                          ? 'text-red-500'
-                          : idea.status === 'in_progress'
-                          ? 'text-amber-500'
-                          : 'text-green-500'
-                      } drop-shadow-sm`}
-                    />
-                  </div>
+                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-amber-100 shadow-inner">
+                  <Lightbulb
+                    size={24}
+                    className="text-amber-500 drop-shadow-sm"
+                  />
                 </div>
                 <div>
                   <h3 className="font-semibold text-slate-800 leading-tight line-clamp-1">
@@ -224,13 +318,13 @@ export function IdeasTab() {
                   </p>
                 </div>
               </div>
-              <div className="flex gap-2 shrink-0">
+              <div className="flex flex-col gap-1 items-end shrink-0">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleEditOpen(idea);
                   }}
-                  className="p-1.5 hover:bg-slate-100 rounded text-slate-600"
+                  className="p-1 hover:bg-slate-100 rounded text-slate-600"
                 >
                   <Edit2 size={16} />
                 </button>
@@ -239,32 +333,28 @@ export function IdeasTab() {
                     e.stopPropagation();
                     handleDelete(idea.id);
                   }}
-                  className="p-1.5 hover:bg-red-100 rounded text-red-600"
+                  className="p-1 hover:bg-red-100 rounded text-red-600"
                 >
                   <Trash2 size={16} />
                 </button>
               </div>
             </div>
-            <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-xs text-slate-500">
-              <span>{format(parseISO(idea.created_at), 'MMM d, yyyy')}</span>
-              <span className="capitalize">{idea.status.replace('_', ' ')}</span>
-            </div>
           </motion.div>
         ))}
       </div>
 
-      {/* VIEW IDEA MODAL */}
+      {/* FULL VIEW MODAL */}
       <AnimatePresence>
         {activeIdea && (
           <motion.div
-            className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-sm flex items-center justify-center"
+            className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setActiveIdea(null)}
           >
             <motion.div
-              className="bg-white rounded-xl p-6 max-w-lg w-full border-2 border-slate-300 shadow-xl relative max-h-[85vh] overflow-y-auto"
+              className="bg-white rounded-xl p-6 w-[95vw] md:w-[640px] max-h-[90vh] overflow-y-auto border-2 border-slate-300 relative"
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -276,31 +366,70 @@ export function IdeasTab() {
               >
                 <X size={18} />
               </button>
-              <h3 className="text-xl font-bold text-slate-800 mb-2">{activeIdea.title}</h3>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">
+                {activeIdea.title}
+              </h3>
               {activeIdea.description && (
                 <p className="text-slate-700 mb-4 whitespace-pre-wrap">
-                  {renderDescription(activeIdea.description)}
+                  {activeIdea.description}
                 </p>
               )}
+              {activeIdea.links && (
+                <div className="mb-4">
+                  <h4 className="font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                    <Link2 size={14} /> Links
+                  </h4>
+                  {renderLinks(activeIdea.links)}
+                </div>
+              )}
               {activeIdea.attachments?.length > 0 && (
-                <div className="space-y-2 mb-4">
+                <div className="mb-4">
+                  <h4 className="font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                    <Paperclip size={14} /> Attachments
+                  </h4>
                   {activeIdea.attachments.map((url, i) => (
                     <a
                       key={i}
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-blue-600 text-sm hover:underline"
+                      className="block text-blue-600 text-sm hover:underline break-all"
                     >
-                      <Paperclip size={14} />
-                      Attachment {i + 1}
+                      File {i + 1}
                     </a>
                   ))}
                 </div>
               )}
-              <div className="flex justify-between text-sm text-slate-500">
-                <span>{format(parseISO(activeIdea.created_at), 'MMM d, yyyy')}</span>
-                <span className="capitalize">{activeIdea.status.replace('_', ' ')}</span>
+              {activeIdea.tag_ids?.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {activeIdea.tag_ids.map((id) => {
+                    const tag = tags.find((t) => t.id === id);
+                    return (
+                      tag && (
+                        <span
+                          key={id}
+                          className="text-xs px-2 py-1 rounded-full text-white"
+                          style={{ backgroundColor: tag.color }}
+                        >
+                          {tag.name}
+                        </span>
+                      )
+                    );
+                  })}
+                </div>
+              )}
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>
+                  {format(parseISO(activeIdea.created_at), 'MMM d, yyyy')}
+                </span>
+                <span>
+                  {activeIdea.submitted_by && (
+                    <>From: {activeIdea.submitted_by}</>
+                  )}
+                  {activeIdea.directed_to && (
+                    <> → To: {activeIdea.directed_to}</>
+                  )}
+                </span>
               </div>
             </motion.div>
           </motion.div>
@@ -311,14 +440,14 @@ export function IdeasTab() {
       <AnimatePresence>
         {editingIdea && (
           <motion.div
-            className="fixed inset-0 z-[10000] bg-black/40 backdrop-blur-sm flex items-center justify-center"
+            className="fixed inset-0 z-[10000] bg-black/50 backdrop-blur-sm flex items-center justify-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setEditingIdea(null)}
           >
             <motion.div
-              className="bg-white rounded-xl p-6 w-full max-w-lg border-2 border-slate-300 shadow-lg relative"
+              className="bg-white rounded-xl p-6 w-[95vw] md:w-[640px] max-h-[90vh] overflow-y-auto border-2 border-slate-300 relative"
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -334,13 +463,20 @@ export function IdeasTab() {
               <input
                 value={editTitle}
                 onChange={(e) => setEditTitle(e.target.value)}
-                className="w-full mb-3 px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full mb-3 px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               />
               <textarea
                 value={editDesc}
                 onChange={(e) => setEditDesc(e.target.value)}
-                rows={5}
-                className="w-full mb-4 px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                rows={4}
+                className="w-full mb-3 px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+              <textarea
+                value={editLinks}
+                onChange={(e) => setEditLinks(e.target.value)}
+                rows={2}
+                className="w-full mb-4 px-4 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                placeholder="Links (one per line)..."
               />
               <div className="flex justify-end gap-3">
                 <button
