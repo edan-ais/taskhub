@@ -214,11 +214,12 @@ export function PeopleTab() {
           <h3 className="text-sm font-semibold text-slate-600 mb-3">
             Team Members
           </h3>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-col md:flex-row md:flex-wrap gap-4">
+            {/* Unassigned first */}
             {unassignedTasks.length > 0 && (
               <button
                 onClick={() => setSelectedPerson(null)}
-                className={`min-w-[260px] px-8 py-4 rounded-xl font-medium border-2 flex items-center justify-between transition-all ${
+                className={`w-full md:min-w-[260px] md:w-auto px-8 py-4 rounded-xl font-medium border-2 flex items-center justify-between transition-all ${
                   selectedPerson === null
                     ? 'bg-slate-50 border-slate-400 shadow-sm'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
@@ -236,7 +237,7 @@ export function PeopleTab() {
             {peopleWithCounts.map((person) => (
               <div
                 key={person.id}
-                className={`min-w-[260px] px-8 py-4 rounded-xl border-2 flex items-center justify-between transition-all ${
+                className={`w-full md:min-w-[260px] md:w-auto px-8 py-4 rounded-xl border-2 flex items-center justify-between transition-all ${
                   selectedPerson === person.name
                     ? 'bg-blue-50 border-blue-400 shadow-sm'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
@@ -268,15 +269,15 @@ export function PeopleTab() {
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-semibold rounded-full px-2.5 py-0.5 bg-slate-100 text-slate-700">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <span className="text-xs font-semibold rounded-full px-2.5 py-0.5 bg-slate-100 text-slate-700 flex-shrink-0">
                         {person.taskCount}
                       </span>
-                      <span className="font-medium truncate max-w-[140px]">
+                      <span className="font-medium truncate max-w-[120px] md:max-w-[140px]">
                         {person.name}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-shrink-0">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -341,7 +342,7 @@ export function PeopleTab() {
                   className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                 >
                   {laneTasks.map((task) => (
-                    <TaskCardPeople key={task.id} task={{ ...task, title: task.title.trim() }} />
+                    <TaskCardPeople key={task.id} task={task} />
                   ))}
                   {laneTasks.length === 0 && (
                     <div className="col-span-full text-center py-6 text-slate-400">
