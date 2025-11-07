@@ -347,6 +347,40 @@ export async function removeTagFromTask(taskId: string, tagId: string) {
 }
 
 /* -------------------------------------------------------------------------- */
+/*                         DIVISION/TASK LINKING HELPERS                      */
+/* -------------------------------------------------------------------------- */
+
+export async function addDivisionToTask(taskId: string, divisionId: string) {
+  const { error } = await supabase
+    .from('task_divisions')
+    .insert({ task_id: taskId, division_id: divisionId });
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: taskId,
+    action: 'division_added',
+    changes: { division_id: divisionId },
+  });
+}
+
+export async function removeDivisionFromTask(taskId: string, divisionId: string) {
+  const { error } = await supabase
+    .from('task_divisions')
+    .delete()
+    .eq('task_id', taskId)
+    .eq('division_id', divisionId);
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: taskId,
+    action: 'division_removed',
+    changes: { division_id: divisionId },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /*                               SUBTASKS CRUD                                */
 /* -------------------------------------------------------------------------- */
 
