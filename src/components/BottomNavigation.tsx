@@ -17,36 +17,41 @@ export function BottomNavigation() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t-2 border-slate-200 shadow-lg">
-      <div className="max-w-[1920px] mx-auto px-2">
-        <div className="flex items-center justify-around h-16">
+      <div className="max-w-[1920px] mx-auto px-2 relative">
+        <div className="flex items-center justify-around h-16 relative">
+          {/* Shared animated pill overlay */}
+          {tabs.map(
+            (tab) =>
+              activeTab === tab.id && (
+                <motion.div
+                  key={tab.id}
+                  layoutId="activeTabPill"
+                  className="absolute top-1/2 -translate-y-1/2 rounded-2xl pointer-events-none"
+                  style={{
+                    backgroundColor: `${tab.color}33`,
+                    width: `calc(100% / ${tabs.length} - 0.5rem)`,
+                    height: '70%',
+                    left: `calc(${tabs.findIndex((t) => t.id === tab.id)} * (100% / ${tabs.length}) + 0.25rem)`,
+                  }}
+                  transition={{
+                    layout: {
+                      type: 'spring',
+                      stiffness: 300,
+                      damping: 30,
+                    },
+                  }}
+                />
+              )
+          )}
+
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
-
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className="relative flex flex-col items-center justify-center flex-1 h-full overflow-hidden"
+                className="relative flex flex-col items-center justify-center flex-1 h-full transition-colors"
               >
-                {/* animated pill stays INSIDE the button now */}
-                {isActive && (
-                  <motion.div
-                    layoutId="activeTabPill"
-                    className="absolute inset-0 mx-2 my-1 rounded-2xl"
-                    style={{
-                      backgroundColor: `${tab.color}33`, // light version of tab color
-                    }}
-                    transition={{
-                      layout: {
-                        type: 'spring',
-                        stiffness: 320,
-                        damping: 30,
-                      },
-                      opacity: { duration: 0.15 },
-                    }}
-                  />
-                )}
-
                 <div
                   className="relative z-10 transition-colors"
                   style={{ color: isActive ? tab.color : '#64748B' }}
