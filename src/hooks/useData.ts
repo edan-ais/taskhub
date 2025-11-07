@@ -582,22 +582,3 @@ function formatTask(task: any): Task {
     notes: task.notes || [],
   };
 }
-
-/* -------------------------------------------------------------------------- */
-/*                          SAFE RE-EXPORTS FOR BUNDLER                       */
-/* -------------------------------------------------------------------------- */
-
-export {
-  moveTask,
-  updateTaskData,
-  createTask,
-  updateSubtask,
-  createSubtask,
-  deleteSubtask,
-  createNote,
-  updateNote,
-  deleteNote,
-  createIdea,
-  updateIdeaData,
-  deleteIdea,
-};
