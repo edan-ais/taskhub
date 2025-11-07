@@ -5,8 +5,8 @@ import {
   Plus,
   Edit2,
   Trash2,
-  ArrowUp,
-  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ChevronDown,
   ChevronRight,
   X,
@@ -32,12 +32,11 @@ export function TagsTab() {
     updateDivision,
     removeDivision,
     showDeleteConfirmation,
-    // ⬇️ these were missing; we need them to update local order
     setTags,
     setDivisions,
   } = useAppStore();
 
-  const { fetchTasks } = useData();
+  const { fetchTasks, fetchTags, fetchDivisions } = useData();
 
   /* ------------------------------------------------
      STATE
@@ -145,7 +144,6 @@ export function TagsTab() {
     } catch (e) {
       console.error("Error adding tag:", e);
     } finally {
-      // close + reset
       setShowAddTag(false);
       setNewTagName("");
       setNewTagColor("#3B82F6");
@@ -162,14 +160,17 @@ export function TagsTab() {
     if (!editingTag) return;
     try {
       const updates = { name: editTagName, color: editTagColor };
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("tags")
         .update(updates)
-        .eq("id", editingTag.id);
+        .eq("id", editingTag.id)
+        .select()
+        .single();
       if (error) throw error;
 
-      // update local store so UI reflects immediately
-      updateTag(editingTag.id, updates);
+      // Update local store with the canonical updated row
+      updateTag(editingTag.id, data);
+      await fetchTags(); // ensure order_index / any defaults are in sync
     } catch (e) {
       console.error("Error saving tag:", e);
     } finally {
@@ -184,21 +185,22 @@ export function TagsTab() {
     const newIndex = direction === "up" ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= tags.length) return;
 
-    // local reorder
+    // Local reorder
     const reordered = [...tags];
     const [moved] = reordered.splice(index, 1);
     reordered.splice(newIndex, 0, moved);
 
-    // update local store right away
+    // Update local store right away
     setTags(reordered);
 
-    // persist order to supabase
+    // Persist order to Supabase
     try {
       await Promise.all(
         reordered.map((t, i) =>
           supabase.from("tags").update({ order_index: i }).eq("id", t.id)
         )
       );
+      await fetchTags(); // reload ordered by order_index so it persists across navigation
     } catch (e) {
       console.error("Error reordering tags:", e);
     }
@@ -213,6 +215,7 @@ export function TagsTab() {
         await supabase.from("tags").delete().eq("id", id);
         removeTag(id);
         if (selectedTag === id) setSelectedTag(null);
+        await fetchTags();
       }
     );
   };
@@ -258,13 +261,16 @@ export function TagsTab() {
     if (!editingDivision) return;
     try {
       const updates = { name: editDivisionName, color: editDivisionColor };
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("divisions")
         .update(updates)
-        .eq("id", editingDivision.id);
+        .eq("id", editingDivision.id)
+        .select()
+        .single();
       if (error) throw error;
 
-      updateDivision(editingDivision.id, updates);
+      updateDivision(editingDivision.id, data);
+      await fetchDivisions();
     } catch (e) {
       console.error("Error saving division:", e);
     } finally {
@@ -283,7 +289,6 @@ export function TagsTab() {
     const [moved] = reordered.splice(index, 1);
     reordered.splice(newIndex, 0, moved);
 
-    // update local store immediately
     setDivisions(reordered);
 
     try {
@@ -292,6 +297,7 @@ export function TagsTab() {
           supabase.from("divisions").update({ order_index: i }).eq("id", d.id)
         )
       );
+      await fetchDivisions();
     } catch (e) {
       console.error("Error reordering divisions:", e);
     }
@@ -308,6 +314,7 @@ export function TagsTab() {
         await supabase.from("divisions").delete().eq("id", id);
         removeDivision(id);
         if (selectedDivision === id) setSelectedDivision(null);
+        await fetchDivisions();
       }
     );
   };
@@ -337,39 +344,39 @@ export function TagsTab() {
         className="flex items-center justify-between p-3 rounded-lg border-2 transition-all select-none shadow-sm relative bg-slate-50 hover:border-blue-300"
         style={{
           borderColor: isActive ? item.color : "#E2E8F0",
-          // fake thick border without changing layout
+          // “thick” selection outline without changing layout
           boxShadow: isActive ? `0 0 0 3px ${item.color} inset` : "none",
         }}
       >
         {isEditing ? (
-            <>
-              <input
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className="flex-1 px-2 py-1 rounded border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoFocus
-              />
-              <input
-                type="color"
-                value={editColor}
-                onChange={(e) => setEditColor(e.target.value)}
-                className="w-10 h-8 rounded cursor-pointer ml-2"
-              />
-              <div className="flex gap-1 ml-2">
-                <button
-                  onClick={onSaveEdit}
-                  className="p-1.5 rounded bg-green-100 text-green-700 hover:bg-green-200"
-                >
-                  <Check size={14} />
-                </button>
-                <button
-                  onClick={onCancelEdit}
-                  className="p-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            </>
+          <>
+            <input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="flex-1 px-2 py-1 rounded border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              autoFocus
+            />
+            <input
+              type="color"
+              value={editColor}
+              onChange={(e) => setEditColor(e.target.value)}
+              className="w-10 h-8 rounded cursor-pointer ml-2"
+            />
+            <div className="flex gap-1 ml-2">
+              <button
+                onClick={onSaveEdit}
+                className="p-1.5 rounded bg-green-100 text-green-700 hover:bg-green-200"
+              >
+                <Check size={14} />
+              </button>
+              <button
+                onClick={onCancelEdit}
+                className="p-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </>
         ) : (
           <>
             <div
@@ -396,16 +403,16 @@ export function TagsTab() {
               <button
                 onClick={() => onMove(item.id, "up")}
                 className="p-1.5 hover:bg-slate-100 rounded text-slate-500"
-                title="Move up"
+                title="Move left"
               >
-                <ArrowUp size={14} />
+                <ArrowLeft size={14} />
               </button>
               <button
                 onClick={() => onMove(item.id, "down")}
                 className="p-1.5 hover:bg-slate-100 rounded text-slate-500"
-                title="Move down"
+                title="Move right"
               >
-                <ArrowDown size={14} />
+                <ArrowRight size={14} />
               </button>
               <button
                 onClick={() => onStartEdit(item)}
