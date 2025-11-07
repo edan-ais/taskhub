@@ -26,19 +26,16 @@ export function BottomNavigation() {
                 <motion.div
                   key={tab.id}
                   layoutId="activeTabPill"
-                  className="absolute top-1/2 -translate-y-1/2 rounded-2xl pointer-events-none"
+                  className="absolute top-[40%] -translate-y-1/2 rounded-2xl pointer-events-none"
                   style={{
                     backgroundColor: `${tab.color}33`,
                     width: `calc(100% / ${tabs.length} - 0.5rem)`,
                     height: '70%',
                     left: `calc(${tabs.findIndex((t) => t.id === tab.id)} * (100% / ${tabs.length}) + 0.25rem)`,
+                    boxShadow: `0 0 12px 4px ${tab.color}40`,
                   }}
                   transition={{
-                    layout: {
-                      type: 'spring',
-                      stiffness: 300,
-                      damping: 30,
-                    },
+                    layout: { type: 'spring', stiffness: 200, damping: 28 },
                   }}
                 />
               )
