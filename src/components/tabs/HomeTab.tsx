@@ -133,7 +133,7 @@ export function HomeTab() {
       onDragEnd={handleDragEnd}
     >
       {/* mobile: push content down to clear 2-row header; desktop: keep as-is */}
-      <div className="pt-[118px] md:pt-0">
+      <div className="pt-[145px] md:pt-0">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
           {[
             { lane: "red", title: "Master / To-Do", color: "red", tasks: redTasks },
