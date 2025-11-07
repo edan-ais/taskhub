@@ -1,9 +1,23 @@
 import { useState, useMemo } from 'react';
-import { Users, Plus, Edit2, Trash2, X, Check, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  Users,
+  Plus,
+  Edit2,
+  Trash2,
+  X,
+  Check,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../../lib/store';
 import { TaskCardPeople } from '../TaskCardPeople';
-import { createPerson, updatePersonData, deletePerson, updateTaskData } from '../../hooks/useData';
+import {
+  createPerson,
+  updatePersonData,
+  deletePerson,
+  updateTaskData,
+} from '../../hooks/useData';
 import type { Person } from '../../lib/types';
 
 export function PeopleTab() {
@@ -54,7 +68,11 @@ export function PeopleTab() {
       : filteredTasks.filter((t) => t.assignee === selectedPerson);
 
   const groupedTasks = useMemo(() => {
-    const lanes = { red: [], yellow: [], green: [] } as Record<string, typeof displayedTasks>;
+    const lanes = {
+      red: [] as typeof displayedTasks,
+      yellow: [] as typeof displayedTasks,
+      green: [] as typeof displayedTasks,
+    };
     displayedTasks.forEach((task) => {
       if (lanes[task.lane]) lanes[task.lane].push(task);
     });
@@ -144,7 +162,7 @@ export function PeopleTab() {
 
   return (
     <div className="space-y-8">
-      {/* --- TEAM MANAGEMENT HEADER --- */}
+      {/* HEADER CARD */}
       <div className="bg-white rounded-xl p-6 border-2 border-slate-300 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -160,7 +178,6 @@ export function PeopleTab() {
           </button>
         </div>
 
-        {/* --- ADD PERSON FIELD --- */}
         {showAddPerson && (
           <div className="mb-6 p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
             <div className="flex gap-3">
@@ -192,9 +209,11 @@ export function PeopleTab() {
           </div>
         )}
 
-        {/* --- PEOPLE FILTER BUTTONS --- */}
+        {/* PEOPLE BUTTONS */}
         <div>
-          <h3 className="text-sm font-semibold text-slate-600 mb-3">Team Members</h3>
+          <h3 className="text-sm font-semibold text-slate-600 mb-3">
+            Team Members
+          </h3>
           <div className="flex flex-wrap gap-4">
             {/* Unassigned first */}
             {unassignedTasks.length > 0 && (
@@ -215,7 +234,6 @@ export function PeopleTab() {
               </button>
             )}
 
-            {/* People */}
             {peopleWithCounts.map((person) => (
               <div
                 key={person.id}
@@ -227,22 +245,28 @@ export function PeopleTab() {
                 onClick={() => setSelectedPerson(person.name)}
               >
                 {editingPerson === person.name ? (
-                  <div className="flex items-center gap-2 w-full">
-                    <input
-                      type="text"
-                      value={editPersonName}
-                      onChange={(e) => setEditPersonName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                      className="flex-1 px-2 py-1 border-2 border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      autoFocus
-                    />
-                    <button onClick={handleSaveEdit} className="p-1 hover:bg-green-100 rounded text-green-600">
-                      <Check size={16} />
-                    </button>
-                    <button onClick={() => setEditingPerson(null)} className="p-1 hover:bg-slate-200 rounded text-slate-600">
-                      <X size={16} />
-                    </button>
-                  </div>
+                    <div className="flex items-center gap-2 w-full">
+                      <input
+                        type="text"
+                        value={editPersonName}
+                        onChange={(e) => setEditPersonName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                        className="flex-1 px-2 py-1 border-2 border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        autoFocus
+                      />
+                      <button
+                        onClick={handleSaveEdit}
+                        className="p-1 hover:bg-green-100 rounded text-green-600"
+                      >
+                        <Check size={16} />
+                      </button>
+                      <button
+                        onClick={() => setEditingPerson(null)}
+                        className="p-1 hover:bg-slate-200 rounded text-slate-600"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
                 ) : (
                   <>
                     <div className="flex items-center gap-3">
@@ -279,28 +303,35 @@ export function PeopleTab() {
         </div>
       </div>
 
-      {/* --- TASKS BY LANE --- */}
-      {['red', 'yellow', 'green'].map((lane) => {
+      {/* LANE SECTIONS */}
+      {(['red', 'yellow', 'green'] as const).map((lane) => {
         const laneTasks = groupedTasks[lane];
-        const laneTitles: Record<string, string> = {
+        const laneTitles: Record<typeof lane, string> = {
           red: 'Pending',
           yellow: 'In Progress',
           green: 'Completed',
         };
-        const laneColors: Record<string, string> = {
+        const laneColors: Record<typeof lane, string> = {
           red: 'border-red-400 bg-red-50',
           yellow: 'border-yellow-400 bg-yellow-50',
           green: 'border-green-400 bg-green-50',
         };
 
         return (
-          <div key={lane} className={`rounded-xl border-2 ${laneColors[lane]} p-6`}>
+          <div
+            key={lane}
+            className={`rounded-xl border-2 ${laneColors[lane]} p-6`}
+          >
             <button
               onClick={() => toggleLane(lane)}
               className="flex items-center justify-between w-full text-left font-semibold text-slate-800 mb-4"
             >
               <div className="flex items-center gap-2 text-lg">
-                {collapsedLanes[lane] ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                {collapsedLanes[lane] ? (
+                  <ChevronRight size={18} />
+                ) : (
+                  <ChevronDown size={18} />
+                )}
                 {laneTitles[lane]} ({laneTasks.length})
               </div>
             </button>
@@ -313,14 +344,15 @@ export function PeopleTab() {
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.3 }}
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-hidden"
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                 >
                   {laneTasks.map((task) => (
                     <TaskCardPeople key={task.id} task={task} />
                   ))}
                   {laneTasks.length === 0 && (
                     <div className="col-span-full text-center py-6 text-slate-400">
-                      No {laneTitles[lane].toLowerCase()} tasks for {selectedPerson || 'unassigned'}
+                      No {laneTitles[lane].toLowerCase()} tasks for{' '}
+                      {selectedPerson || 'unassigned'}
                     </div>
                   )}
                 </motion.div>
