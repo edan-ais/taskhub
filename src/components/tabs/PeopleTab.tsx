@@ -161,7 +161,7 @@ export function PeopleTab() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="mt-[100px] md:mt-0 px-4 md:px-6 lg:px-8 space-y-8">
       {/* HEADER CARD */}
       <div className="bg-white rounded-xl p-6 border-2 border-slate-300 shadow-sm">
         <div className="flex items-center justify-between mb-6">
@@ -215,7 +215,6 @@ export function PeopleTab() {
             Team Members
           </h3>
           <div className="flex flex-wrap gap-4">
-            {/* Unassigned first */}
             {unassignedTasks.length > 0 && (
               <button
                 onClick={() => setSelectedPerson(null)}
@@ -245,35 +244,37 @@ export function PeopleTab() {
                 onClick={() => setSelectedPerson(person.name)}
               >
                 {editingPerson === person.name ? (
-                    <div className="flex items-center gap-2 w-full">
-                      <input
-                        type="text"
-                        value={editPersonName}
-                        onChange={(e) => setEditPersonName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                        className="flex-1 px-2 py-1 border-2 border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        autoFocus
-                      />
-                      <button
-                        onClick={handleSaveEdit}
-                        className="p-1 hover:bg-green-100 rounded text-green-600"
-                      >
-                        <Check size={16} />
-                      </button>
-                      <button
-                        onClick={() => setEditingPerson(null)}
-                        className="p-1 hover:bg-slate-200 rounded text-slate-600"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
+                  <div className="flex items-center gap-2 w-full">
+                    <input
+                      type="text"
+                      value={editPersonName}
+                      onChange={(e) => setEditPersonName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                      className="flex-1 px-2 py-1 border-2 border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleSaveEdit}
+                      className="p-1 hover:bg-green-100 rounded text-green-600"
+                    >
+                      <Check size={16} />
+                    </button>
+                    <button
+                      onClick={() => setEditingPerson(null)}
+                      className="p-1 hover:bg-slate-200 rounded text-slate-600"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
                 ) : (
                   <>
                     <div className="flex items-center gap-3">
                       <span className="text-xs font-semibold rounded-full px-2.5 py-0.5 bg-slate-100 text-slate-700">
                         {person.taskCount}
                       </span>
-                      <span className="font-medium truncate">{person.name}</span>
+                      <span className="font-medium truncate max-w-[140px]">
+                        {person.name}
+                      </span>
                     </div>
                     <div className="flex items-center gap-3">
                       <button
@@ -318,20 +319,13 @@ export function PeopleTab() {
         };
 
         return (
-          <div
-            key={lane}
-            className={`rounded-xl border-2 ${laneColors[lane]} p-6`}
-          >
+          <div key={lane} className={`rounded-xl border-2 ${laneColors[lane]} p-6`}>
             <button
               onClick={() => toggleLane(lane)}
               className="flex items-center justify-between w-full text-left font-semibold text-slate-800 mb-4"
             >
               <div className="flex items-center gap-2 text-lg">
-                {collapsedLanes[lane] ? (
-                  <ChevronRight size={18} />
-                ) : (
-                  <ChevronDown size={18} />
-                )}
+                {collapsedLanes[lane] ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
                 {laneTitles[lane]} ({laneTasks.length})
               </div>
             </button>
@@ -347,7 +341,7 @@ export function PeopleTab() {
                   className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                 >
                   {laneTasks.map((task) => (
-                    <TaskCardPeople key={task.id} task={task} />
+                    <TaskCardPeople key={task.id} task={{ ...task, title: task.title.trim() }} />
                   ))}
                   {laneTasks.length === 0 && (
                     <div className="col-span-full text-center py-6 text-slate-400">
