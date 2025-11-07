@@ -1,8 +1,17 @@
 export type Lane = 'red' | 'yellow' | 'green';
 
-export type ProgressState = 'not_started' | 'working' | 'blocked' | 'needs_review' | 'completed';
+export type ProgressState =
+  | 'not_started'
+  | 'working'
+  | 'blocked'
+  | 'needs_review'
+  | 'completed';
 
 export type IdeaStatus = 'not_addressed' | 'in_progress' | 'completed';
+
+/* -------------------------------------------------------------------------- */
+/*                                 CORE TYPES                                 */
+/* -------------------------------------------------------------------------- */
 
 export interface Division {
   id: string;
@@ -16,6 +25,24 @@ export interface Tag {
   name: string;
   color: string;
   created_at: string;
+}
+
+export interface Subtask {
+  id: string;
+  task_id: string;
+  title: string;
+  progress_state: ProgressState;
+  order_rank: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Note {
+  id: string;
+  task_id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Task {
@@ -37,23 +64,9 @@ export interface Task {
   notes?: Note[];
 }
 
-export interface Subtask {
-  id: string;
-  task_id: string;
-  title: string;
-  progress_state: ProgressState;
-  order_rank: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Note {
-  id: string;
-  task_id: string;
-  content: string;
-  created_at: string;
-  updated_at: string;
-}
+/* -------------------------------------------------------------------------- */
+/*                                   IDEAS                                    */
+/* -------------------------------------------------------------------------- */
 
 export interface Idea {
   id: string;
@@ -64,8 +77,19 @@ export interface Idea {
   source_email_id?: string | null;
   created_at: string;
   updated_at: string;
-  tags?: Tag[];
+
+  /* 🆕 Expanded fields */
+  attachments?: string[];          // File URLs
+  links?: string[];                // External or internal references
+  tag_ids?: string[];              // IDs of related tags (mirrors other tabs)
+  submitted_by?: string | null;    // Person who created/submitted the idea
+  directed_to?: string | null;     // Intended reviewer or assignee
+  tags?: Tag[];                    // Optional populated tag data
 }
+
+/* -------------------------------------------------------------------------- */
+/*                                  PEOPLE                                    */
+/* -------------------------------------------------------------------------- */
 
 export interface Person {
   id: string;
@@ -75,12 +99,37 @@ export interface Person {
   updated_at: string;
 }
 
+/* -------------------------------------------------------------------------- */
+/*                               EVENT LOGGING                                */
+/* -------------------------------------------------------------------------- */
+
 export interface EventLog {
   id: string;
   entity_type: 'task' | 'subtask' | 'idea' | 'note' | 'tag' | 'division';
   entity_id: string;
-  action: 'created' | 'updated' | 'deleted' | 'moved' | 'reordered' | 'tagged' | 'untagged';
+  action:
+    | 'created'
+    | 'updated'
+    | 'deleted'
+    | 'moved'
+    | 'reordered'
+    | 'tagged'
+    | 'untagged';
   changes: Record<string, unknown>;
+  created_at: string;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                              EMAIL STRUCTURES                              */
+/* -------------------------------------------------------------------------- */
+
+export interface EmailAttachment {
+  id: string;
+  email_id: string;
+  filename: string;
+  file_url: string;
+  file_size: number;
+  mime_type: string;
   created_at: string;
 }
 
@@ -104,14 +153,14 @@ export interface InboundEmail {
   attachments?: EmailAttachment[];
 }
 
-export interface EmailAttachment {
-  id: string;
-  email_id: string;
-  filename: string;
-  file_url: string;
-  file_size: number;
-  mime_type: string;
-  created_at: string;
-}
+/* -------------------------------------------------------------------------- */
+/*                                   GLOBAL                                   */
+/* -------------------------------------------------------------------------- */
 
-export type TabName = 'home' | 'people' | 'tags' | 'calendar' | 'ideas' | 'analytics';
+export type TabName =
+  | 'home'
+  | 'people'
+  | 'tags'
+  | 'calendar'
+  | 'ideas'
+  | 'analytics';
