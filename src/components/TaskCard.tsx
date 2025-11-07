@@ -1,6 +1,13 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Calendar, User, AlertCircle, Check, CheckCheck } from 'lucide-react';
+import {
+  GripVertical,
+  Calendar,
+  User,
+  AlertCircle,
+  Check,
+  CheckCheck,
+} from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format, isPast, parseISO } from 'date-fns';
 import type { Task } from '../lib/types';
@@ -29,23 +36,41 @@ export function TaskCard({ task }: TaskCardProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const isOverdue = task.due_date && isPast(parseISO(task.due_date)) && task.lane !== 'green';
-  const completedSubtasks = task.subtasks?.filter((st) => st.progress_state === 'completed').length || 0;
+  const isOverdue =
+    task.due_date && isPast(parseISO(task.due_date)) && task.lane !== 'green';
+  const completedSubtasks =
+    task.subtasks?.filter((st) => st.progress_state === 'completed').length || 0;
   const totalSubtasks = task.subtasks?.length || 0;
 
-  const handleStatusToggle = async (e: React.MouseEvent, targetLane: 'yellow' | 'green' | 'red') => {
+  const handleStatusToggle = async (
+    e: React.MouseEvent,
+    targetLane: 'yellow' | 'green' | 'red'
+  ) => {
     e.stopPropagation();
     const maxOrderRank = 1000000;
     await moveTask(task.id, targetLane, maxOrderRank);
     updateTask(task.id, { lane: targetLane });
   };
 
-  const handleSubtaskToggle = async (e: React.MouseEvent, subtaskId: string, isCompleted: boolean) => {
+  const handleSubtaskToggle = async (
+    e: React.MouseEvent,
+    subtaskId: string,
+    isCompleted: boolean
+  ) => {
     e.stopPropagation();
-    await updateSubtask(subtaskId, { progress_state: isCompleted ? 'not_started' : 'completed' });
+    await updateSubtask(subtaskId, {
+      progress_state: isCompleted ? 'not_started' : 'completed',
+    });
     updateTask(task.id, {
       subtasks: task.subtasks?.map((st) =>
-        st.id === subtaskId ? { ...st, progress_state: isCompleted ? 'not_started' as const : 'completed' as const } : st
+        st.id === subtaskId
+          ? {
+              ...st,
+              progress_state: isCompleted
+                ? ('not_started' as const)
+                : ('completed' as const),
+            }
+          : st
       ),
     });
   };
@@ -58,11 +83,10 @@ export function TaskCard({ task }: TaskCardProps) {
       animate={{ opacity: 1, y: 0 }}
       className={`group relative rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer border-2 ${
         laneBorderColors[task.lane]
-      } ${
-        isOverdue ? 'ring-2 ring-red-500' : ''
-      }`}
+      } ${isOverdue ? 'ring-2 ring-red-500' : ''}`}
       onClick={() => setSelectedTask(task)}
     >
+      {/* --- Controls (Move, Complete, etc.) --- */}
       <div className="absolute top-2 right-2 flex gap-1 items-center">
         {task.lane === 'red' && (
           <button
@@ -110,21 +134,31 @@ export function TaskCard({ task }: TaskCardProps) {
         </button>
       </div>
 
+      {/* --- Task Content --- */}
       <div className="space-y-3">
         <div>
-          <h3 className="font-semibold text-slate-800 pr-24 leading-tight">{task.title}</h3>
+          <h3 className="font-semibold text-slate-800 pr-24 leading-tight">
+            {task.title}
+          </h3>
           {task.description && (
-            <p className="text-sm text-slate-600 mt-1 line-clamp-2">{task.description}</p>
+            <p className="text-sm text-slate-600 mt-1 line-clamp-2">
+              {task.description}
+            </p>
           )}
         </div>
 
+        {/* --- TAGS --- */}
         {task.tags && task.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {task.tags.map((tag) => (
               <span
                 key={tag.id}
                 className="text-xs px-2 py-1 rounded-full border"
-                style={{ borderColor: tag.color, backgroundColor: `${tag.color}20`, color: tag.color }}
+                style={{
+                  borderColor: tag.color,
+                  backgroundColor: `${tag.color}20`,
+                  color: tag.color,
+                }}
               >
                 {tag.name}
               </span>
@@ -132,6 +166,26 @@ export function TaskCard({ task }: TaskCardProps) {
           </div>
         )}
 
+        {/* --- DIVISIONS --- */}
+        {task.divisions && task.divisions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {task.divisions.map((division) => (
+              <span
+                key={division.id}
+                className="text-xs px-2 py-1 rounded-full border font-medium"
+                style={{
+                  borderColor: division.color,
+                  backgroundColor: `${division.color}20`,
+                  color: division.color,
+                }}
+              >
+                {division.name}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* --- SUBTASKS --- */}
         {totalSubtasks > 0 && (
           <div className="space-y-1">
             <div className="text-xs font-medium text-slate-600">
@@ -143,11 +197,23 @@ export function TaskCard({ task }: TaskCardProps) {
                   <input
                     type="checkbox"
                     checked={subtask.progress_state === 'completed'}
-                    onChange={(e) => handleSubtaskToggle(e, subtask.id, subtask.progress_state === 'completed')}
+                    onChange={(e) =>
+                      handleSubtaskToggle(
+                        e,
+                        subtask.id,
+                        subtask.progress_state === 'completed'
+                      )
+                    }
                     onClick={(e) => e.stopPropagation()}
                     className="w-3 h-3 rounded border-slate-300"
                   />
-                  <span className={`flex-1 ${subtask.progress_state === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                  <span
+                    className={`flex-1 ${
+                      subtask.progress_state === 'completed'
+                        ? 'line-through text-slate-400'
+                        : 'text-slate-700'
+                    }`}
+                  >
                     {subtask.title}
                   </span>
                 </div>
@@ -161,6 +227,7 @@ export function TaskCard({ task }: TaskCardProps) {
           </div>
         )}
 
+        {/* --- FOOTER INFO --- */}
         <div className="flex items-center justify-between text-xs text-slate-600">
           {task.assignee && (
             <div className="flex items-center gap-1">
@@ -169,7 +236,11 @@ export function TaskCard({ task }: TaskCardProps) {
             </div>
           )}
           {task.due_date && (
-            <div className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-semibold' : ''}`}>
+            <div
+              className={`flex items-center gap-1 ${
+                isOverdue ? 'text-red-600 font-semibold' : ''
+              }`}
+            >
               {isOverdue && <AlertCircle size={14} />}
               <Calendar size={14} />
               <span>{format(parseISO(task.due_date), 'MMM d')}</span>
