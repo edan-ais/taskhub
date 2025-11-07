@@ -4,6 +4,7 @@ import {
   Calendar,
   User,
   Tag,
+  Layers,
   FileText,
   CheckSquare,
   Plus,
@@ -11,7 +12,6 @@ import {
   Edit2,
   Link2,
   Paperclip,
-  Layers,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -30,8 +30,15 @@ import {
   updateNote,
   deleteNote,
   createPerson,
+  addDivisionToTask,
+  removeDivisionFromTask,
 } from '../hooks/useData';
-import type { ProgressState, Subtask, Tag as TagType } from '../lib/types';
+import type {
+  ProgressState,
+  Subtask,
+  Tag as TagType,
+  Division,
+} from '../lib/types';
 
 const progressStates: { value: ProgressState; label: string }[] = [
   { value: 'not_started', label: 'Not Started' },
@@ -65,16 +72,21 @@ export function TaskDrawer() {
     updateTask,
     removeTask,
     tags,
-    showDeleteConfirmation,
     divisions,
+    showDeleteConfirmation,
   } = useAppStore();
+
   const [newSubtask, setNewSubtask] = useState('');
   const [tempSubtasks, setTempSubtasks] = useState<TempSubtask[]>([]);
   const [tempTags, setTempTags] = useState<TagType[]>([]);
+  const [tempDivisions, setTempDivisions] = useState<Division[]>([]);
   const [newNote, setNewNote] = useState('');
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#3B82F6');
   const [isCreatingTag, setIsCreatingTag] = useState(false);
+  const [newDivisionName, setNewDivisionName] = useState('');
+  const [newDivisionColor, setNewDivisionColor] = useState('#8B5CF6');
+  const [isCreatingDivision, setIsCreatingDivision] = useState(false);
   const [newAssignee, setNewAssignee] = useState('');
   const [showAssigneeInput, setShowAssigneeInput] = useState(false);
   const [editingSubtask, setEditingSubtask] = useState<string | null>(null);
@@ -83,13 +95,14 @@ export function TaskDrawer() {
   const [newLinkUrl, setNewLinkUrl] = useState('');
   const [tempLinks, setTempLinks] = useState<LinkItem[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
-  const isNewTask = selectedTask?.id.startsWith('temp-');
+  const isNewTask = selectedTask?.id?.startsWith('temp-');
   const { people } = useAppStore.getState();
 
   useEffect(() => {
     if (selectedTask && isNewTask) {
       setTempSubtasks([]);
       setTempTags([]);
+      setTempDivisions([]);
       setTempLinks([]);
     }
   }, [selectedTask?.id, isNewTask]);
@@ -99,6 +112,7 @@ export function TaskDrawer() {
   const handleClose = () => {
     setTempSubtasks([]);
     setTempTags([]);
+    setTempDivisions([]);
     setTempLinks([]);
     setNewSubtask('');
     setNewNote('');
@@ -118,146 +132,9 @@ export function TaskDrawer() {
     }
   };
 
-  const handleSaveTask = async () => {
-    try {
-      const newTask = await createTask({
-        title: selectedTask.title || 'New Task',
-        description: selectedTask.description,
-        lane: selectedTask.lane,
-        assignee: selectedTask.assignee,
-        due_date: selectedTask.due_date,
-        order_rank: selectedTask.order_rank,
-        division_id: selectedTask.division_id ?? null,
-      });
-
-      for (const tempSubtask of tempSubtasks) {
-        await createSubtask(newTask.id, tempSubtask.title, Date.now());
-      }
-
-      for (const tempTag of tempTags) {
-        await addTagToTask(newTask.id, tempTag.id);
-      }
-
-      if (tempLinks.length) {
-        await updateTaskData(newTask.id, {
-          links: tempLinks,
-        });
-      }
-
-      removeTask(selectedTask.id);
-      handleClose();
-    } catch (error) {
-      console.error('Error creating task:', error);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (isNewTask) {
-      removeTask(selectedTask.id);
-      handleClose();
-      return;
-    }
-
-    showDeleteConfirmation(
-      'Delete Task',
-      'Are you sure you want to delete this task? This action cannot be undone.',
-      async () => {
-        const taskId = selectedTask.id;
-        handleClose();
-        removeTask(taskId);
-        try {
-          await deleteTask(taskId);
-        } catch (error) {
-          console.error('Failed to delete task:', error);
-        }
-      }
-    );
-  };
-
-  const handleAddSubtask = () => {
-    if (!newSubtask.trim()) return;
-
-    if (isNewTask) {
-      const tempId = 'temp-subtask-' + Date.now();
-      setTempSubtasks([
-        ...tempSubtasks,
-        { id: tempId, title: newSubtask, progress_state: 'not_started' },
-      ]);
-      setNewSubtask('');
-    } else {
-      handleAddSubtaskToExisting();
-    }
-  };
-
-  const handleAddSubtaskToExisting = async () => {
-    if (!newSubtask.trim() || isNewTask) return;
-    const maxOrderRank = selectedTask.subtasks?.length
-      ? Math.max(...selectedTask.subtasks.map((st) => st.order_rank))
-      : 0;
-    const subtask = await createSubtask(
-      selectedTask.id,
-      newSubtask,
-      maxOrderRank + 1000
-    );
-    updateTask(selectedTask.id, {
-      subtasks: [...(selectedTask.subtasks || []), subtask],
-    });
-    setNewSubtask('');
-  };
-
-  const handleUpdateSubtask = async (id: string, updates: any) => {
-    if (isNewTask) {
-      setTempSubtasks((prev) =>
-        prev.map((st) => (st.id === id ? { ...st, ...updates } : st))
-      );
-    } else {
-      await updateSubtask(id, updates);
-      updateTask(selectedTask.id, {
-        subtasks: selectedTask.subtasks?.map((st) =>
-          st.id === id ? { ...st, ...updates } : st
-        ),
-      });
-    }
-    setEditingSubtask(null);
-    setEditingSubtaskTitle('');
-  };
-
-  const handleDeleteSubtask = async (id: string) => {
-    if (isNewTask) {
-      setTempSubtasks(tempSubtasks.filter((st) => st.id !== id));
-    } else {
-      await deleteSubtask(id);
-      updateTask(selectedTask.id, {
-        subtasks: selectedTask.subtasks?.filter((st) => st.id !== id),
-      });
-    }
-  };
-
-  const handleAddNote = async () => {
-    if (!newNote.trim() || isNewTask) return;
-    const note = await createNote(selectedTask.id, newNote);
-    updateTask(selectedTask.id, {
-      notes: [...(selectedTask.notes || []), note],
-    });
-    setNewNote('');
-  };
-
-  const handleUpdateNote = async (id: string, content: string) => {
-    await updateNote(id, content);
-    updateTask(selectedTask.id, {
-      notes: selectedTask.notes?.map((n) =>
-        n.id === id ? { ...n, content } : n
-      ),
-    });
-  };
-
-  const handleDeleteNote = async (id: string) => {
-    await deleteNote(id);
-    updateTask(selectedTask.id, {
-      notes: selectedTask.notes?.filter((n) => n.id !== id),
-    });
-  };
-
+  /* -----------------------------
+     TAGS
+  ------------------------------*/
   const handleToggleTag = async (tagId: string) => {
     if (isNewTask) {
       const hasTag = tempTags.some((t) => t.id === tagId);
@@ -265,9 +142,7 @@ export function TaskDrawer() {
         setTempTags(tempTags.filter((t) => t.id !== tagId));
       } else {
         const tag = tags.find((t) => t.id === tagId);
-        if (tag) {
-          setTempTags([...tempTags, tag]);
-        }
+        if (tag) setTempTags([...tempTags, tag]);
       }
     } else {
       const hasTag = selectedTask.tags?.some((t) => t.id === tagId);
@@ -290,16 +165,13 @@ export function TaskDrawer() {
 
   const handleCreateTag = async () => {
     if (!newTagName.trim()) return;
-
     try {
       const { data: tag, error } = await supabase
         .from('tags')
         .insert({ name: newTagName, color: newTagColor })
         .select()
         .single();
-
       if (error) throw error;
-
       const { addTag } = useAppStore.getState();
       addTag(tag);
       setNewTagName('');
@@ -310,34 +182,159 @@ export function TaskDrawer() {
     }
   };
 
-  const handleAddAssignee = async () => {
-    if (!newAssignee.trim()) return;
-    try {
-      const person = await createPerson(newAssignee);
-      const { addPerson } = useAppStore.getState();
-      addPerson(person);
-      handleUpdate({ assignee: newAssignee });
-      setNewAssignee('');
-      setShowAssigneeInput(false);
-    } catch (error) {
-      console.error('Error adding person:', error);
+  /* -----------------------------
+     DIVISIONS
+  ------------------------------*/
+  const handleToggleDivision = async (divisionId: string) => {
+    if (isNewTask) {
+      const hasDivision = tempDivisions.some((d) => d.id === divisionId);
+      if (hasDivision) {
+        setTempDivisions(tempDivisions.filter((d) => d.id !== divisionId));
+      } else {
+        const division = divisions.find((d) => d.id === divisionId);
+        if (division) setTempDivisions([...tempDivisions, division]);
+      }
+    } else {
+      const hasDivision = selectedTask.divisions?.some((d) => d.id === divisionId);
+      if (hasDivision) {
+        await removeDivisionFromTask(selectedTask.id, divisionId);
+        updateTask(selectedTask.id, {
+          divisions: selectedTask.divisions?.filter((d) => d.id !== divisionId),
+        });
+      } else {
+        await addDivisionToTask(selectedTask.id, divisionId);
+        const division = divisions.find((d) => d.id === divisionId);
+        if (division) {
+          updateTask(selectedTask.id, {
+            divisions: [...(selectedTask.divisions || []), division],
+          });
+        }
+      }
     }
   };
 
-  const handleAddLink = async () => {
-    if (!newLinkLabel.trim() || !newLinkUrl.trim()) return;
-    const newLink: LinkItem = {
-      id: 'temp-link-' + Date.now(),
-      label: newLinkLabel.trim(),
-      url: newLinkUrl.trim(),
-    };
+  const handleCreateDivision = async () => {
+    if (!newDivisionName.trim()) return;
+    try {
+      const { data: division, error } = await supabase
+        .from('divisions')
+        .insert({ name: newDivisionName, color: newDivisionColor })
+        .select()
+        .single();
+      if (error) throw error;
+      const { addDivision } = useAppStore.getState();
+      addDivision(division);
+      setNewDivisionName('');
+      setNewDivisionColor('#8B5CF6');
+      setIsCreatingDivision(false);
+    } catch (error) {
+      console.error('Error creating division:', error);
+    }
+  };
+
+  const displayTags = isNewTask ? tempTags : selectedTask.tags || [];
+  const displayDivisions = isNewTask ? tempDivisions : selectedTask.divisions || [];
+  const displaySubtasks = isNewTask ? tempSubtasks : selectedTask.subtasks || [];
+  const displayLinks = isNewTask ? tempLinks : selectedTask.links || [];
+  const displayFiles: UploadedFile[] = selectedTask.files || [];
+
+  /* -----------------------------
+     SUBTASKS
+  ------------------------------*/
+  const handleAddSubtask = async () => {
+    if (!newSubtask.trim()) return;
 
     if (isNewTask) {
-      setTempLinks((prev) => [...prev, newLink]);
+      const tempId = 'temp-subtask-' + Date.now();
+      setTempSubtasks([
+        ...tempSubtasks,
+        { id: tempId, title: newSubtask, progress_state: 'not_started' },
+      ]);
+      setNewSubtask('');
     } else {
-      const currentLinks: LinkItem[] = selectedTask.links || [];
-      const updatedLinks = [...currentLinks, { label: newLink.label, url: newLink.url }];
-      await handleUpdate({ links: updatedLinks });
+      const maxOrderRank = selectedTask.subtasks?.length
+        ? Math.max(...selectedTask.subtasks.map((st: any) => st.order_rank))
+        : 0;
+      const subtask = await createSubtask(
+        selectedTask.id,
+        newSubtask,
+        maxOrderRank + 1000
+      );
+      updateTask(selectedTask.id, {
+        subtasks: [...(selectedTask.subtasks || []), subtask],
+      });
+      setNewSubtask('');
+    }
+  };
+
+  const handleUpdateSubtask = async (id: string, updates: any) => {
+    if (isNewTask) {
+      setTempSubtasks((prev) =>
+        prev.map((st) => (st.id === id ? { ...st, ...updates } : st))
+      );
+    } else {
+      await updateSubtask(id, updates);
+      updateTask(selectedTask.id, {
+        subtasks: selectedTask.subtasks?.map((st: any) =>
+          st.id === id ? { ...st, ...updates } : st
+        ),
+      });
+    }
+    setEditingSubtask(null);
+    setEditingSubtaskTitle('');
+  };
+
+  const handleDeleteSubtask = async (id: string) => {
+    if (isNewTask) {
+      setTempSubtasks(tempSubtasks.filter((st) => st.id !== id));
+    } else {
+      await deleteSubtask(id);
+      updateTask(selectedTask.id, {
+        subtasks: selectedTask.subtasks?.filter((st: any) => st.id !== id),
+      });
+    }
+  };
+
+  /* -----------------------------
+     NOTES
+  ------------------------------*/
+  const handleAddNote = async () => {
+    if (!newNote.trim() || isNewTask) return;
+    const note = await createNote(selectedTask.id, newNote);
+    updateTask(selectedTask.id, {
+      notes: [...(selectedTask.notes || []), note],
+    });
+    setNewNote('');
+  };
+
+  const handleUpdateNote = async (id: string, content: string) => {
+    await updateNote(id, content);
+    updateTask(selectedTask.id, {
+      notes: selectedTask.notes?.map((n: any) =>
+        n.id === id ? { ...n, content } : n
+      ),
+    });
+  };
+
+  const handleDeleteNote = async (id: string) => {
+    await deleteNote(id);
+    updateTask(selectedTask.id, {
+      notes: selectedTask.notes?.filter((n: any) => n.id !== id),
+    });
+  };
+
+  /* -----------------------------
+     LINKS
+  ------------------------------*/
+  const handleAddLink = async () => {
+    if (!newLinkLabel.trim() || !newLinkUrl.trim()) return;
+    const newLink = { label: newLinkLabel.trim(), url: newLinkUrl.trim() };
+
+    if (isNewTask) {
+      setTempLinks([...tempLinks, newLink]);
+    } else {
+      const updated = [...(selectedTask.links || []), newLink];
+      await handleUpdate({ links: updated });
     }
 
     setNewLinkLabel('');
@@ -346,20 +343,21 @@ export function TaskDrawer() {
 
   const handleDeleteLink = async (idx: number) => {
     if (isNewTask) {
-      setTempLinks((prev) => prev.filter((_, i) => i !== idx));
+      setTempLinks(tempLinks.filter((_, i) => i !== idx));
     } else {
-      const currentLinks: LinkItem[] = selectedTask.links || [];
-      const updatedLinks = currentLinks.filter((_, i) => i !== idx);
-      await handleUpdate({ links: updatedLinks });
+      const updated = (selectedTask.links || []).filter((_, i) => i !== idx);
+      await handleUpdate({ links: updated });
     }
   };
 
+  /* -----------------------------
+     FILE UPLOADS
+  ------------------------------*/
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || !files.length) return;
     if (isNewTask) {
-      // easiest/safest: require save first
-      alert('Save the task first before uploading files.');
+      alert('Save the task first to upload files.');
       return;
     }
 
@@ -372,20 +370,11 @@ export function TaskDrawer() {
       const { error: uploadError } = await supabase.storage
         .from('task-files')
         .upload(path, file);
-
       if (!uploadError) {
-        const { data: publicUrlData } = supabase.storage
-          .from('task-files')
-          .getPublicUrl(path);
-
-        const fileUrl =
-          publicUrlData?.publicUrl ||
-          (publicUrlData as any)?.public_url ||
-          '';
-
+        const { data } = supabase.storage.from('task-files').getPublicUrl(path);
         uploadedFiles.push({
           name: file.name,
-          url: fileUrl,
+          url: data.publicUrl,
         });
       } else {
         console.error('Failed to upload file: ', uploadError);
@@ -394,15 +383,74 @@ export function TaskDrawer() {
 
     await handleUpdate({ files: uploadedFiles });
     setUploadingFiles(false);
-    // reset input
     e.target.value = '';
   };
 
-  const displayTags = isNewTask ? tempTags : selectedTask.tags || [];
-  const displaySubtasks = isNewTask ? tempSubtasks : selectedTask.subtasks || [];
-  const displayLinks = isNewTask ? tempLinks : selectedTask.links || [];
-  const displayFiles: UploadedFile[] = selectedTask.files || [];
+  /* -----------------------------
+     SAVE / DELETE
+  ------------------------------*/
+  const handleSaveTask = async () => {
+    try {
+      const newTask = await createTask({
+        title: selectedTask.title || 'New Task',
+        description: selectedTask.description,
+        lane: selectedTask.lane,
+        assignee: selectedTask.assignee,
+        due_date: selectedTask.due_date,
+        order_rank: selectedTask.order_rank,
+      });
 
+      for (const tag of tempTags) {
+        await addTagToTask(newTask.id, tag.id);
+      }
+
+      for (const division of tempDivisions) {
+        await addDivisionToTask(newTask.id, division.id);
+      }
+
+      for (const tempSub of tempSubtasks) {
+        await createSubtask(newTask.id, tempSub.title, Date.now());
+      }
+
+      if (tempLinks.length) {
+        await updateTaskData(newTask.id, {
+          links: tempLinks,
+        });
+      }
+
+      removeTask(selectedTask.id);
+      handleClose();
+    } catch (error) {
+      console.error('Error creating task:', error);
+    }
+  };
+
+  const handleDeleteTask = async () => {
+    if (isNewTask) {
+      removeTask(selectedTask.id);
+      handleClose();
+      return;
+    }
+
+    showDeleteConfirmation(
+      'Delete Task',
+      'Are you sure you want to delete this task? This action cannot be undone.',
+      async () => {
+        const taskId = selectedTask.id;
+        handleClose();
+        removeTask(taskId);
+        try {
+          await deleteTask(taskId);
+        } catch (error) {
+          console.error('Failed to delete task:', error);
+        }
+      }
+    );
+  };
+
+  /* -----------------------------
+     RENDER
+  ------------------------------*/
   return (
     <AnimatePresence>
       <motion.div
@@ -420,6 +468,7 @@ export function TaskDrawer() {
           className="w-full max-w-2xl h-full bg-white shadow-2xl overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* HEADER */}
           <div className="sticky top-0 z-10 bg-blue-600 border-b-2 border-blue-700 p-6 text-white">
             <div className="flex items-start justify-between">
               <div className="flex-1">
@@ -440,6 +489,7 @@ export function TaskDrawer() {
             </div>
           </div>
 
+          {/* BODY */}
           <div className="p-6 space-y-6">
             {/* Description */}
             <div>
@@ -455,48 +505,62 @@ export function TaskDrawer() {
               />
             </div>
 
-            {/* Assignee / Due / Division */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* Assignee & Due Date */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Assignee */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   <User size={16} className="inline mr-1" />
                   Assignee
                 </label>
                 {!showAssigneeInput ? (
-                  <div className="space-y-2">
-                    <select
-                      value={selectedTask.assignee || ''}
-                      onChange={(e) => {
-                        if (e.target.value === '__new__') {
-                          setShowAssigneeInput(true);
-                        } else {
-                          handleUpdate({ assignee: e.target.value });
-                        }
-                      }}
-                      className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
-                    >
-                      <option value="">Unassigned</option>
-                      {people.map((person) => (
-                        <option key={person.id} value={person.name}>
-                          {person.name}
-                        </option>
-                      ))}
-                      <option value="__new__">+ Add New Person</option>
-                    </select>
-                  </div>
+                  <select
+                    value={selectedTask.assignee || ''}
+                    onChange={(e) => {
+                      if (e.target.value === '__new__') {
+                        setShowAssigneeInput(true);
+                      } else {
+                        handleUpdate({ assignee: e.target.value });
+                      }
+                    }}
+                    className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+                  >
+                    <option value="">Unassigned</option>
+                    {people.map((person) => (
+                      <option key={person.id} value={person.name}>
+                        {person.name}
+                      </option>
+                    ))}
+                    <option value="__new__">+ Add New Person</option>
+                  </select>
                 ) : (
                   <div className="flex gap-2">
                     <input
                       type="text"
                       value={newAssignee}
                       onChange={(e) => setNewAssignee(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddAssignee()}
+                      onKeyDown={(e) => e.key === 'Enter' && newAssignee.trim() && (async () => {
+                        const person = await createPerson(newAssignee);
+                        const { addPerson } = useAppStore.getState();
+                        addPerson(person);
+                        handleUpdate({ assignee: newAssignee });
+                        setNewAssignee('');
+                        setShowAssigneeInput(false);
+                      })()}
                       className="flex-1 px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Enter name..."
                       autoFocus
                     />
                     <button
-                      onClick={handleAddAssignee}
+                      onClick={async () => {
+                        if (!newAssignee.trim()) return;
+                        const person = await createPerson(newAssignee);
+                        const { addPerson } = useAppStore.getState();
+                        addPerson(person);
+                        handleUpdate({ assignee: newAssignee });
+                        setNewAssignee('');
+                        setShowAssigneeInput(false);
+                      }}
                       className="px-4 h-10 bg-blue-600 text-white rounded-lg border-2 border-blue-700 hover:bg-blue-700 transition-colors"
                     >
                       Add
@@ -514,6 +578,7 @@ export function TaskDrawer() {
                 )}
               </div>
 
+              {/* Due Date */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   <Calendar size={16} className="inline mr-1" />
@@ -522,53 +587,83 @@ export function TaskDrawer() {
                 <input
                   type="date"
                   value={selectedTask.due_date || ''}
-                  onChange={(e) =>
-                    handleUpdate({ due_date: e.target.value || null })
-                  }
+                  onChange={(e) => handleUpdate({ due_date: e.target.value || null })}
                   className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  <Layers size={16} className="inline mr-1" />
-                  Division
-                </label>
-                <select
-                  value={selectedTask.division_id || ''}
-                  onChange={(e) =>
-                    handleUpdate({
-                      division_id: e.target.value || null,
-                    })
-                  }
-                  className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  <option value="">No division</option>
-                  {divisions?.map((division) => (
-                    <option key={division.id} value={division.id}>
-                      {division.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
 
-            {/* Progress */}
+            {/* Divisions */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Progress State
+                <Layers size={16} className="inline mr-1" />
+                Divisions
               </label>
-              <select
-                value={selectedTask.progress_state}
-                onChange={(e) => handleUpdate({ progress_state: e.target.value })}
-                className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
-              >
-                {progressStates.map((state) => (
-                  <option key={state.value} value={state.value}>
-                    {state.label}
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {divisions.map((division) => {
+                    const isSelected = displayDivisions.some((d) => d.id === division.id);
+                    return (
+                      <button
+                        key={division.id}
+                        onClick={() => handleToggleDivision(division.id)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium border-2 transition-all ${
+                          isSelected
+                            ? 'ring-2 ring-offset-1'
+                            : 'opacity-60 hover:opacity-100'
+                        }`}
+                        style={{
+                          backgroundColor: `${division.color}20`,
+                          color: division.color,
+                          borderColor: division.color,
+                        }}
+                      >
+                        {division.name}
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => setIsCreatingDivision(!isCreatingDivision)}
+                    className="px-3 py-1.5 rounded-full text-sm font-medium border-2 border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all"
+                  >
+                    + Add Division
+                  </button>
+                </div>
+                {isCreatingDivision && (
+                  <div className="flex gap-2 items-center p-3 bg-slate-50 rounded-lg border-2 border-slate-200">
+                    <input
+                      type="text"
+                      value={newDivisionName}
+                      onChange={(e) => setNewDivisionName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleCreateDivision()}
+                      placeholder="Division name"
+                      className="flex-1 px-3 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="color"
+                      value={newDivisionColor}
+                      onChange={(e) => setNewDivisionColor(e.target.value)}
+                      className="w-12 h-10 rounded cursor-pointer"
+                    />
+                    <button
+                      onClick={handleCreateDivision}
+                      className="px-4 h-10 bg-violet-600 text-white rounded-lg border-2 border-violet-700 hover:bg-violet-700 transition-colors"
+                    >
+                      Create
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsCreatingDivision(false);
+                        setNewDivisionName('');
+                        setNewDivisionColor('#8B5CF6');
+                      }}
+                      className="px-4 h-10 bg-slate-200 text-slate-700 rounded-lg border-2 border-slate-300 hover:bg-slate-300 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Tags */}
@@ -644,15 +739,32 @@ export function TaskDrawer() {
               </div>
             </div>
 
+            {/* Progress State */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Progress State
+              </label>
+              <select
+                value={selectedTask.progress_state}
+                onChange={(e) => handleUpdate({ progress_state: e.target.value })}
+                className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+              >
+                {progressStates.map((state) => (
+                  <option key={state.value} value={state.value}>
+                    {state.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Subtasks */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <CheckSquare size={16} className="inline mr-1" />
                 Subtasks (
                 {
-                  displaySubtasks.filter(
-                    (st) => st.progress_state === 'completed'
-                  ).length
+                  displaySubtasks.filter((st) => st.progress_state === 'completed')
+                    .length
                 }
                 /{displaySubtasks.length})
               </label>
@@ -675,12 +787,22 @@ export function TaskDrawer() {
                       className="w-4 h-4 rounded border-slate-300"
                     />
                     {editingSubtask === subtask.id ? (
-                      <>
-                        <input
-                          type="text"
-                          value={editingSubtaskTitle}
-                          onChange={(e) => setEditingSubtaskTitle(e.target.value)}
-                          onBlur={() => {
+                      <input
+                        type="text"
+                        value={editingSubtaskTitle}
+                        onChange={(e) => setEditingSubtaskTitle(e.target.value)}
+                        onBlur={() => {
+                          if (editingSubtaskTitle.trim()) {
+                            handleUpdateSubtask(subtask.id, {
+                              title: editingSubtaskTitle.trim(),
+                            });
+                          } else {
+                            setEditingSubtask(null);
+                            setEditingSubtaskTitle('');
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
                             if (editingSubtaskTitle.trim()) {
                               handleUpdateSubtask(subtask.id, {
                                 title: editingSubtaskTitle.trim(),
@@ -689,23 +811,11 @@ export function TaskDrawer() {
                               setEditingSubtask(null);
                               setEditingSubtaskTitle('');
                             }
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              if (editingSubtaskTitle.trim()) {
-                                handleUpdateSubtask(subtask.id, {
-                                  title: editingSubtaskTitle.trim(),
-                                });
-                              } else {
-                                setEditingSubtask(null);
-                                setEditingSubtaskTitle('');
-                              }
-                            }
-                          }}
-                          className="flex-1 px-2 py-1 bg-white border border-slate-300 rounded outline-none focus:ring-2 focus:ring-blue-500"
-                          autoFocus
-                        />
-                      </>
+                          }
+                        }}
+                        className="flex-1 px-2 py-1 bg-white border border-slate-300 rounded outline-none focus:ring-2 focus:ring-blue-500"
+                        autoFocus
+                      />
                     ) : (
                       <>
                         <span className="flex-1">{subtask.title}</span>
@@ -754,33 +864,30 @@ export function TaskDrawer() {
                 Links
               </label>
               <div className="space-y-2">
-                {displayLinks.length > 0 &&
-                  displayLinks.map((link, idx) => (
-                    <div
-                      key={link.id || `${link.url}-${idx}`}
-                      className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border-2 border-slate-200"
-                    >
-                      <div className="flex flex-col">
-                        <span className="font-medium text-slate-800">
-                          {link.label}
-                        </span>
-                        <a
-                          href={link.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-sm text-blue-600 underline break-all"
-                        >
-                          {link.url}
-                        </a>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteLink(idx)}
-                        className="p-1 hover:bg-red-100 rounded text-red-600"
+                {displayLinks.map((link, idx) => (
+                  <div
+                    key={link.url + idx}
+                    className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border-2 border-slate-200"
+                  >
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium text-slate-800">{link.label}</span>
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm text-blue-600 underline break-all"
                       >
-                        <Trash2 size={14} />
-                      </button>
+                        {link.url}
+                      </a>
                     </div>
-                  ))}
+                    <button
+                      onClick={() => handleDeleteLink(idx)}
+                      className="p-1 hover:bg-red-100 rounded text-red-600"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -855,7 +962,7 @@ export function TaskDrawer() {
                   Notes
                 </label>
                 <div className="space-y-2">
-                  {selectedTask.notes?.map((note) => (
+                  {selectedTask.notes?.map((note: any) => (
                     <div
                       key={note.id}
                       className="bg-amber-50 p-4 rounded-lg border-2 border-amber-200"
@@ -863,9 +970,7 @@ export function TaskDrawer() {
                       <div className="flex justify-between items-start gap-2">
                         <textarea
                           value={note.content}
-                          onChange={(e) =>
-                            handleUpdateNote(note.id, e.target.value)
-                          }
+                          onChange={(e) => handleUpdateNote(note.id, e.target.value)}
                           className="flex-1 bg-transparent outline-none resize-none"
                           rows={2}
                         />
@@ -877,7 +982,9 @@ export function TaskDrawer() {
                         </button>
                       </div>
                       <div className="text-xs text-slate-500 mt-2">
-                        {format(new Date(note.created_at), 'MMM d, yyyy h:mm a')}
+                        {note.created_at
+                          ? format(new Date(note.created_at), 'MMM d, yyyy h:mm a')
+                          : ''}
                       </div>
                     </div>
                   ))}
@@ -908,7 +1015,7 @@ export function TaskDrawer() {
                 Save Task
               </button>
               <button
-                onClick={handleDelete}
+                onClick={handleDeleteTask}
                 className="w-full px-4 py-3 bg-red-500 text-white rounded-lg border-2 border-red-600 hover:bg-red-600 transition-colors font-medium"
               >
                 {isNewTask ? 'Cancel' : 'Delete Task'}
