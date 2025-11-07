@@ -103,8 +103,10 @@ export function Lane({
       </div>
 
       {/* TASK CONTENT */}
-      <div
-        className={`flex-1 min-h-full overflow-y-auto p-4 ${laneColors[lane]} border-t-0`}
+<div
+  className={`flex-1 min-h-full overflow-visible p-4 ${laneColors[lane]} border-t-0`}
+>
+
       >
         <SortableContext
           items={tasks.map((t) => t.id)}
