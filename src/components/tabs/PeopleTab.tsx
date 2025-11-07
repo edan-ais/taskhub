@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Users, Plus, Edit2, Trash2, X, Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../../lib/store';
-import { TaskCard } from '../TaskCard';
+import { TaskCardPeople } from '../TaskCardPeople';
 import { createPerson, updatePersonData, deletePerson, updateTaskData } from '../../hooks/useData';
 import type { Person } from '../../lib/types';
 
@@ -190,6 +190,7 @@ export function PeopleTab() {
           </div>
         )}
 
+        {/* People Filter Buttons */}
         <div>
           <h3 className="text-sm font-semibold text-slate-600 mb-3">Team Members</h3>
           <div className="flex flex-wrap gap-3">
@@ -197,25 +198,27 @@ export function PeopleTab() {
             {unassignedTasks.length > 0 && (
               <button
                 onClick={() => setSelectedPerson(null)}
-                className={`min-w-[200px] px-6 py-3.5 rounded-xl font-medium border-2 flex items-center justify-between transition-all ${
+                className={`min-w-[220px] px-6 py-3.5 rounded-xl font-medium border-2 flex items-center justify-between transition-all ${
                   selectedPerson === null
-                    ? 'bg-slate-600 text-white border-slate-700 shadow-md'
+                    ? 'bg-slate-50 border-slate-400 shadow-sm'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                 }`}
               >
-                <span>Unassigned</span>
-                <span className="text-xs bg-slate-100 text-slate-700 rounded-full px-2 py-0.5">
-                  {unassignedTasks.length}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold bg-slate-100 text-slate-700 rounded-full px-2 py-0.5">
+                    {unassignedTasks.length}
+                  </span>
+                  <span>Unassigned</span>
+                </div>
               </button>
             )}
 
             {peopleWithCounts.map((person) => (
               <div
                 key={person.id}
-                className={`min-w-[200px] px-6 py-3.5 rounded-xl border-2 flex items-center justify-between transition-all ${
+                className={`min-w-[220px] px-6 py-3.5 rounded-xl border-2 flex items-center justify-between transition-all ${
                   selectedPerson === person.name
-                    ? 'bg-blue-600 text-white border-blue-700 shadow-md'
+                    ? 'bg-blue-50 border-blue-400 shadow-sm'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                 }`}
                 onClick={() => setSelectedPerson(person.name)}
@@ -239,17 +242,13 @@ export function PeopleTab() {
                   </div>
                 ) : (
                   <>
-                    <span className="font-medium truncate max-w-[120px]">{person.name}</span>
                     <div className="flex items-center gap-2">
-                      <span
-                        className={`text-xs font-semibold rounded-full px-2 py-0.5 ${
-                          selectedPerson === person.name
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
+                      <span className="text-xs font-semibold rounded-full px-2 py-0.5 bg-slate-100 text-slate-700">
                         {person.taskCount}
                       </span>
+                      <span className="font-medium truncate">{person.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -314,21 +313,7 @@ export function PeopleTab() {
                   className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-hidden"
                 >
                   {laneTasks.map((task) => (
-                    <motion.div
-                      key={task.id}
-                      className="h-[260px] flex flex-col justify-between bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden"
-                      initial={{ opacity: 0, y: 15 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.25 }}
-                    >
-                      <div className="p-4 flex flex-col justify-between h-full">
-                        <h4 className="font-semibold text-slate-800 mb-2 line-clamp-1">{task.title}</h4>
-                        <p className="text-sm text-slate-600 line-clamp-3">{task.description}</p>
-                        {task.subtasks && task.subtasks.length > 3 && (
-                          <p className="text-xs text-slate-400 mt-1">+{task.subtasks.length - 3} more…</p>
-                        )}
-                      </div>
-                    </motion.div>
+                    <TaskCardPeople key={task.id} task={task} />
                   ))}
                   {laneTasks.length === 0 && (
                     <div className="col-span-full text-center py-6 text-slate-400">
