@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAppStore } from "../../lib/store";
 import { TaskCardPeople as TaskCard } from "../TaskCardPeople";
 import { supabase } from "../../lib/supabase";
+import { updateTaskData, moveTask, useData } from "../../hooks/useData";
 
 export function TagsTab() {
   const {
@@ -32,6 +33,8 @@ export function TagsTab() {
     removeDivision,
     showDeleteConfirmation,
   } = useAppStore();
+
+  const { fetchTasks } = useData();
 
   /* ------------------------------------------------
      STATE
@@ -91,6 +94,32 @@ export function TagsTab() {
   const toggleLane = (lane: string) =>
     setCollapsedLanes((prev) => ({ ...prev, [lane]: !prev[lane] }));
 
+  /* ------------------------------------------------
+     TASK UPDATES + REORDER
+  ------------------------------------------------ */
+  const handleUpdateTask = async (taskId: string, updates: any) => {
+    try {
+      await updateTaskData(taskId, updates);
+      await fetchTasks();
+    } catch (e) {
+      console.error("Error updating task:", e);
+    }
+  };
+
+  const handleReorderTask = async (lane: string, newOrder: any[]) => {
+    try {
+      for (let i = 0; i < newOrder.length; i++) {
+        await moveTask(newOrder[i].id, lane, i + 1);
+      }
+      await fetchTasks();
+    } catch (e) {
+      console.error("Error reordering tasks:", e);
+    }
+  };
+
+  /* ------------------------------------------------
+     TAG CRUD
+  ------------------------------------------------ */
   const handleAddTag = async () => {
     if (!newTagName.trim()) return setShowAddTag(false);
     try {
@@ -147,12 +176,10 @@ export function TagsTab() {
     const [moved] = reordered.splice(index, 1);
     reordered.splice(newIndex, 0, moved);
 
+    // update order in DB
     reordered.forEach((t, i) =>
       supabase.from("tags").update({ order_index: i }).eq("id", t.id)
     );
-
-    // Optimistically update UI
-    reordered.forEach((t, i) => (t.order_index = i));
   };
 
   const handleDeleteTag = (id: string, name: string) => {
@@ -233,8 +260,6 @@ export function TagsTab() {
     reordered.forEach((d, i) =>
       supabase.from("divisions").update({ order_index: i }).eq("id", d.id)
     );
-
-    reordered.forEach((d, i) => (d.order_index = i));
   };
 
   const handleDeleteDivision = (id: string, name: string) => {
@@ -253,7 +278,7 @@ export function TagsTab() {
   };
 
   /* ------------------------------------------------
-     RENDER UTIL
+     RENDER ITEM (Tags/Divisions)
   ------------------------------------------------ */
   const renderItem = (
     item: any,
@@ -274,11 +299,17 @@ export function TagsTab() {
     const isEditing = editingItem?.id === item.id;
     return (
       <div
-        className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all select-none shadow-sm ${
+        className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all select-none shadow-sm relative ${
           isActive
-            ? "border-4 border-blue-400 bg-blue-50"
-            : "border-slate-200 bg-slate-50 hover:border-blue-300"
+            ? "bg-blue-50"
+            : "bg-slate-50 hover:border-blue-300"
         }`}
+        style={{
+          borderColor: isActive ? item.color : "#E2E8F0",
+          boxShadow: isActive
+            ? `0 0 0 3px ${item.color} inset`
+            : "0 0 0 0 transparent",
+        }}
       >
         {isEditing ? (
           <>
@@ -317,7 +348,10 @@ export function TagsTab() {
             >
               <div
                 className="w-6 h-6 rounded-full border-2 shrink-0"
-                style={{ backgroundColor: item.color, borderColor: item.color }}
+                style={{
+                  backgroundColor: item.color,
+                  borderColor: item.color,
+                }}
               />
               <div className="min-w-0">
                 <div className="font-medium text-slate-800 truncate">
@@ -558,7 +592,12 @@ export function TagsTab() {
                   className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                 >
                   {laneTasks.map((task) => (
-                    <TaskCard key={task.id} task={task} />
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      onUpdate={(updates) => handleUpdateTask(task.id, updates)}
+                      onReorder={(lane, newOrder) => handleReorderTask(lane, newOrder)}
+                    />
                   ))}
                   {laneTasks.length === 0 && (
                     <div className="col-span-full text-center py-6 text-slate-400">
