@@ -46,11 +46,11 @@ export function Lane({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col h-full border-2 border-slate-300 rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 ${
+      className={`flex flex-col min-h-full border-2 border-slate-300 rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 ${
         isOver ? "border-blue-500 scale-[1.01]" : ""
       }`}
     >
-      {/* HEADER */}
+      {/* Header */}
       <div className="flex-shrink-0 bg-white border-b border-slate-300 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -62,7 +62,7 @@ export function Lane({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Collapse Toggle (Mobile Only) */}
+            {/* Collapse button */}
             <button
               onClick={onToggleCollapse}
               className="md:hidden p-2 rounded-lg border border-slate-300 hover:bg-slate-100 transition-colors"
@@ -82,7 +82,6 @@ export function Lane({
               </motion.svg>
             </button>
 
-            {/* Add Task Button */}
             <button
               onClick={handleAddTask}
               className="p-2 hover:bg-slate-100 rounded-lg border border-slate-300 transition-colors group"
@@ -97,7 +96,7 @@ export function Lane({
         </div>
       </div>
 
-      {/* TASK CONTENT */}
+      {/* Content area fills full height and stays colored */}
       <motion.div
         initial={false}
         animate={{
@@ -106,24 +105,20 @@ export function Lane({
           height: isCollapsed ? 0 : "auto",
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className={`flex-1 h-full overflow-y-auto p-4 ${laneColors[lane]} border-t-0`}
+        className={`flex-1 min-h-full p-4 ${laneColors[lane]} border-t-0`}
       >
         <SortableContext
           items={tasks.map((t) => t.id)}
           strategy={verticalListSortingStrategy}
         >
-          <div className="space-y-3 min-h-full">
+          <div className="flex flex-col justify-start min-h-full space-y-3">
             {tasks.map((task) => (
               <TaskCard key={task.id} task={task} />
             ))}
             {tasks.length === 0 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex items-center justify-center h-32 text-slate-400 text-sm"
-              >
+              <div className="flex items-center justify-center h-32 text-slate-400 text-sm">
                 Drop tasks here or click + to add
-              </motion.div>
+              </div>
             )}
           </div>
         </SortableContext>
