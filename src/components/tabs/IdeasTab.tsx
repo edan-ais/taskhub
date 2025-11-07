@@ -41,7 +41,7 @@ export function IdeasTab() {
   const [editDesc, setEditDesc] = useState('');
 
   // ───────────────────────────────
-  // Filtering and Sorting
+  // Filtering + Sorting
   // ───────────────────────────────
   const filteredIdeas = ideas
     .filter((idea) => {
@@ -129,14 +129,14 @@ export function IdeasTab() {
   };
 
   // ───────────────────────────────
-  // Component JSX
+  // UI
   // ───────────────────────────────
   return (
     <div className="mt-[100px] md:mt-0 px-4 md:px-6 lg:px-8 space-y-6">
       {/* NEW IDEA */}
       <div className="bg-white rounded-xl p-6 border-2 border-slate-300">
         <h2 className="text-2xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <Lightbulb className="text-amber-500" size={26} />
+          <Lightbulb className="text-amber-500 drop-shadow-lg" size={32} />
           Ideas & Requests
         </h2>
 
@@ -192,17 +192,29 @@ export function IdeasTab() {
             onClick={() => setActiveIdea(idea)}
           >
             <div className="flex justify-between items-start mb-3">
-              <div className="flex items-start gap-2">
-                <Lightbulb
-                  size={20}
-                  className={`mt-1.5 opacity-80 ${
-                    idea.status === 'not_addressed'
-                      ? 'text-rose-400'
-                      : idea.status === 'in_progress'
-                      ? 'text-amber-400'
-                      : 'text-emerald-400'
-                  }`}
-                />
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <div
+                    className={`w-10 h-10 flex items-center justify-center rounded-full shadow-sm ${
+                      idea.status === 'not_addressed'
+                        ? 'bg-red-100'
+                        : idea.status === 'in_progress'
+                        ? 'bg-amber-100'
+                        : 'bg-green-100'
+                    }`}
+                  >
+                    <Lightbulb
+                      size={22}
+                      className={`${
+                        idea.status === 'not_addressed'
+                          ? 'text-red-500'
+                          : idea.status === 'in_progress'
+                          ? 'text-amber-500'
+                          : 'text-green-500'
+                      } drop-shadow-sm`}
+                    />
+                  </div>
+                </div>
                 <div>
                   <h3 className="font-semibold text-slate-800 leading-tight line-clamp-1">
                     {idea.title}
@@ -245,7 +257,7 @@ export function IdeasTab() {
       <AnimatePresence>
         {activeIdea && (
           <motion.div
-            className="fixed left-0 right-0 bottom-0 top-[100px] md:top-0 z-[999] bg-black/40 backdrop-blur-sm flex items-center justify-center"
+            className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-sm flex items-center justify-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -299,7 +311,7 @@ export function IdeasTab() {
       <AnimatePresence>
         {editingIdea && (
           <motion.div
-            className="fixed left-0 right-0 bottom-0 top-[100px] md:top-0 z-[1000] bg-black/40 backdrop-blur-sm flex items-center justify-center"
+            className="fixed inset-0 z-[10000] bg-black/40 backdrop-blur-sm flex items-center justify-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
