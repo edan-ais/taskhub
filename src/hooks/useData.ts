@@ -84,7 +84,12 @@ export function useData() {
   const fetchIdeas = useCallback(async () => {
     const { data: ideas, error } = await supabase
       .from('ideas')
-      .select('*')
+      .select(
+        `
+        *,
+        tags:idea_tags(tag:tags(*))
+      `
+      )
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -94,9 +99,7 @@ export function useData() {
 
     const formattedIdeas: Idea[] = (ideas || []).map((idea: any) => ({
       ...idea,
-      attachments: idea.attachments || [],
-      links: idea.links || [],
-      tag_ids: idea.tag_ids || [],
+      tags: idea.tags?.map((t: any) => t.tag) || [],
     }));
 
     setIdeas(formattedIdeas);
@@ -159,6 +162,7 @@ export function useData() {
 
     loadAllData();
 
+    // tasks + related tables
     const tasksChannel = supabase
       .channel('tasks-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, fetchTasks)
@@ -219,6 +223,270 @@ export function useData() {
 }
 
 /* -------------------------------------------------------------------------- */
+/*                             TASK CRUD OPERATIONS                           */
+/* -------------------------------------------------------------------------- */
+
+export async function createTask(data: {
+  title: string;
+  description?: string;
+  lane?: Lane;
+  assignee?: string;
+  due_date?: string | null;
+  order_rank?: number;
+}) {
+  const { data: task, error } = await supabase
+    .from('tasks')
+    .insert({
+      title: data.title,
+      description: data.description || '',
+      lane: data.lane || 'red',
+      assignee: data.assignee || '',
+      due_date: data.due_date || null,
+      order_rank: data.order_rank || Date.now(),
+    })
+    .select(
+      `
+      *,
+      tags:task_tags(tag:tags(*)),
+      divisions:task_divisions(division:divisions(*)),
+      subtasks(*),
+      notes(*)
+    `
+    )
+    .single();
+
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: task.id,
+    action: 'created',
+    changes: { task },
+  });
+
+  return formatTask(task);
+}
+
+export async function updateTaskData(id: string, updates: Partial<Task>) {
+  const { error } = await supabase
+    .from('tasks')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: id,
+    action: 'updated',
+    changes: updates,
+  });
+}
+
+export async function deleteTask(id: string) {
+  const { error } = await supabase.from('tasks').delete().eq('id', id);
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: id,
+    action: 'deleted',
+    changes: {},
+  });
+}
+
+export async function moveTask(id: string, lane: Lane, order_rank: number) {
+  const updates: any = { lane, order_rank, updated_at: new Date().toISOString() };
+
+  if (lane === 'green') {
+    updates.completed_at = new Date().toISOString();
+    updates.progress_state = 'completed';
+  }
+
+  const { error } = await supabase.from('tasks').update(updates).eq('id', id);
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: id,
+    action: 'moved',
+    changes: { lane, order_rank },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           TAG/TASK LINKING HELPERS                         */
+/* -------------------------------------------------------------------------- */
+
+export async function addTagToTask(taskId: string, tagId: string) {
+  const { error } = await supabase.from('task_tags').insert({ task_id: taskId, tag_id: tagId });
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: taskId,
+    action: 'tagged',
+    changes: { tag_id: tagId },
+  });
+}
+
+export async function removeTagFromTask(taskId: string, tagId: string) {
+  const { error } = await supabase
+    .from('task_tags')
+    .delete()
+    .eq('task_id', taskId)
+    .eq('tag_id', tagId);
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: taskId,
+    action: 'untagged',
+    changes: { tag_id: tagId },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/*                               SUBTASKS CRUD                                */
+/* -------------------------------------------------------------------------- */
+
+export async function createSubtask(taskId: string, title: string, order_rank?: number) {
+  const { data: subtask, error } = await supabase
+    .from('subtasks')
+    .insert({
+      task_id: taskId,
+      title,
+      order_rank: order_rank || Date.now(),
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return subtask;
+}
+
+export async function updateSubtask(id: string, updates: any) {
+  const { error } = await supabase
+    .from('subtasks')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteSubtask(id: string) {
+  const { error } = await supabase.from('subtasks').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                 NOTES CRUD                                 */
+/* -------------------------------------------------------------------------- */
+
+export async function createNote(taskId: string, content: string) {
+  const { data: note, error } = await supabase
+    .from('notes')
+    .insert({ task_id: taskId, content })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return note;
+}
+
+export async function updateNote(id: string, content: string) {
+  const { error } = await supabase
+    .from('notes')
+    .update({ content, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+export async function deleteNote(id: string) {
+  const { error } = await supabase.from('notes').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                             TAG & DIVISION CRUD                            */
+/* -------------------------------------------------------------------------- */
+
+export async function createTag(name: string, color: string) {
+  const { data, error } = await supabase
+    .from('tags')
+    .insert({ name, color, order_index: Date.now() })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateTagData(id: string, updates: Partial<Tag>) {
+  const { error } = await supabase
+    .from('tags')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteTag(id: string) {
+  const { error } = await supabase.from('tags').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function createDivision(name: string, color: string) {
+  const { data, error } = await supabase
+    .from('divisions')
+    .insert({ name, color, order_index: Date.now() })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateDivisionData(id: string, updates: Partial<Division>) {
+  const { error } = await supabase
+    .from('divisions')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteDivision(id: string) {
+  const { error } = await supabase.from('divisions').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                 PEOPLE CRUD                                */
+/* -------------------------------------------------------------------------- */
+
+export async function createPerson(name: string, email?: string) {
+  const { data: person, error } = await supabase
+    .from('people')
+    .insert({ name, email: email || null })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return person;
+}
+
+export async function updatePersonData(id: string, updates: { name?: string; email?: string }) {
+  const { error } = await supabase
+    .from('people')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+export async function deletePerson(id: string) {
+  const { error } = await supabase.from('people').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/* -------------------------------------------------------------------------- */
 /*                                 IDEA CRUD                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -230,7 +498,6 @@ export async function createIdea(data: {
   tag_ids?: string[];
   submitted_by?: string | null;
   directed_to?: string | null;
-  converted_to_task_id?: string | null;
 }) {
   const { data: idea, error } = await supabase
     .from('ideas')
@@ -242,9 +509,13 @@ export async function createIdea(data: {
       tag_ids: data.tag_ids || [],
       submitted_by: data.submitted_by || null,
       directed_to: data.directed_to || null,
-      converted_to_task_id: data.converted_to_task_id || null,
     })
-    .select('*')
+    .select(
+      `
+      *,
+      tags:idea_tags(tag:tags(*))
+    `
+    )
     .single();
 
   if (error) throw error;
@@ -258,16 +529,22 @@ export async function createIdea(data: {
 
   return {
     ...idea,
-    attachments: idea.attachments || [],
-    links: idea.links || [],
-    tag_ids: idea.tag_ids || [],
+    tags: idea.tags?.map((t: any) => t.tag) || [],
   };
 }
 
 export async function updateIdeaData(id: string, updates: Partial<Idea>) {
   const { error } = await supabase
     .from('ideas')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+      attachments: updates.attachments || [],
+      links: updates.links || [],
+      tag_ids: updates.tag_ids || [],
+      submitted_by: updates.submitted_by || null,
+      directed_to: updates.directed_to || null,
+    })
     .eq('id', id);
 
   if (error) throw error;
@@ -305,3 +582,22 @@ function formatTask(task: any): Task {
     notes: task.notes || [],
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/*                          SAFE RE-EXPORTS FOR BUNDLER                       */
+/* -------------------------------------------------------------------------- */
+
+export {
+  moveTask,
+  updateTaskData,
+  createTask,
+  updateSubtask,
+  createSubtask,
+  deleteSubtask,
+  createNote,
+  updateNote,
+  deleteNote,
+  createIdea,
+  updateIdeaData,
+  deleteIdea,
+};
