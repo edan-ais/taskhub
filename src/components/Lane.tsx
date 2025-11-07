@@ -46,7 +46,7 @@ export function Lane({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col border-2 border-slate-300 rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 ${
+      className={`flex flex-col h-full border-2 border-slate-300 rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 ${
         isOver ? "border-blue-500 scale-[1.01]" : ""
       }`}
     >
@@ -97,7 +97,7 @@ export function Lane({
         </div>
       </div>
 
-      {/* TASK CONTENT (Animated fade/slide, not height shrink) */}
+      {/* TASK CONTENT */}
       <motion.div
         initial={false}
         animate={{
@@ -106,13 +106,13 @@ export function Lane({
           height: isCollapsed ? 0 : "auto",
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className={`overflow-hidden p-4 ${laneColors[lane]} border-t-0`}
+        className={`flex-1 h-full overflow-y-auto p-4 ${laneColors[lane]} border-t-0`}
       >
         <SortableContext
           items={tasks.map((t) => t.id)}
           strategy={verticalListSortingStrategy}
         >
-          <div className="space-y-3">
+          <div className="space-y-3 min-h-full">
             {tasks.map((task) => (
               <TaskCard key={task.id} task={task} />
             ))}
