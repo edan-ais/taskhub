@@ -136,12 +136,18 @@ export function TaskCardPeople({ task }: TaskCardPeopleProps) {
         </button>
       </div>
 
-      {/* Body grid: ensures consistent layout */}
+      {/* Body grid */}
       <div className="flex flex-col justify-between h-full">
         <div className="space-y-2">
           {/* Title + Description */}
           <div className="min-h-[48px]">
-            <h3 className="font-semibold text-slate-800 leading-tight line-clamp-1">
+            <h3
+              className="
+                font-semibold text-slate-800 leading-tight 
+                truncate whitespace-nowrap overflow-hidden text-ellipsis
+                max-w-[70%] md:max-w-full
+              "
+            >
               {task.title}
             </h3>
             {task.description ? (
