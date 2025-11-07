@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -8,13 +8,12 @@ import {
   useSensor,
   useSensors,
   closestCorners,
-} from '@dnd-kit/core';
-import { arrayMove } from '@dnd-kit/sortable';
-import { motion } from 'framer-motion';
-import { useAppStore } from '../../lib/store';
-import { moveTask, updateTaskData } from '../../hooks/useData';
-import { Lane } from '../Lane';
-import type { Task, Lane as LaneType } from '../../lib/types';
+} from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
+import { useAppStore } from "../../lib/store";
+import { moveTask, updateTaskData } from "../../hooks/useData";
+import { Lane } from "../Lane";
+import type { Task, Lane as LaneType } from "../../lib/types";
 
 export function HomeTab() {
   const { tasks, searchQuery, updateTask } = useAppStore();
@@ -29,9 +28,8 @@ export function HomeTab() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  const toggleCollapse = (lane: LaneType) => {
+  const toggleCollapse = (lane: LaneType) =>
     setCollapsed((prev) => ({ ...prev, [lane]: !prev[lane] }));
-  };
 
   const filteredTasks = tasks.filter(
     (t) =>
@@ -40,11 +38,18 @@ export function HomeTab() {
       t.assignee.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const redTasks = filteredTasks.filter((t) => t.lane === 'red').sort((a, b) => a.order_rank - b.order_rank);
-  const yellowTasks = filteredTasks.filter((t) => t.lane === 'yellow').sort((a, b) => a.order_rank - b.order_rank);
-  const greenTasks = filteredTasks.filter((t) => t.lane === 'green').sort((a, b) => a.order_rank - b.order_rank);
+  const redTasks = filteredTasks
+    .filter((t) => t.lane === "red")
+    .sort((a, b) => a.order_rank - b.order_rank);
+  const yellowTasks = filteredTasks
+    .filter((t) => t.lane === "yellow")
+    .sort((a, b) => a.order_rank - b.order_rank);
+  const greenTasks = filteredTasks
+    .filter((t) => t.lane === "green")
+    .sort((a, b) => a.order_rank - b.order_rank);
 
-  const handleDragStart = (e: DragStartEvent) => setActiveId(e.active.id as string);
+  const handleDragStart = (e: DragStartEvent) =>
+    setActiveId(e.active.id as string);
 
   const handleDragOver = (e: DragOverEvent) => {
     const { active, over } = e;
@@ -52,9 +57,10 @@ export function HomeTab() {
     const activeTask = tasks.find((t) => t.id === active.id);
     if (!activeTask) return;
     const overId = over.id as string;
-    if (['red', 'yellow', 'green'].includes(overId)) {
+    if (["red", "yellow", "green"].includes(overId)) {
       const newLane = overId as LaneType;
-      if (activeTask.lane !== newLane) updateTask(activeTask.id, { lane: newLane });
+      if (activeTask.lane !== newLane)
+        updateTask(activeTask.id, { lane: newLane });
     }
   };
 
@@ -68,7 +74,7 @@ export function HomeTab() {
 
     const overId = over.id as string;
     let targetLane: LaneType;
-    if (['red', 'yellow', 'green'].includes(overId)) {
+    if (["red", "yellow", "green"].includes(overId)) {
       targetLane = overId as LaneType;
     } else {
       const overTask = tasks.find((t) => t.id === overId);
@@ -98,14 +104,16 @@ export function HomeTab() {
   const handleAddTask = (lane: LaneType) => {
     if (collapsed[lane]) toggleCollapse(lane);
     const tasksInLane = tasks.filter((t) => t.lane === lane);
-    const maxRank = tasksInLane.length ? Math.max(...tasksInLane.map((t) => t.order_rank)) : 0;
+    const maxRank = tasksInLane.length
+      ? Math.max(...tasksInLane.map((t) => t.order_rank))
+      : 0;
     const newTask = {
-      id: 'temp-' + Date.now(),
-      title: 'New Task',
-      description: '',
+      id: "temp-" + Date.now(),
+      title: "New Task",
+      description: "",
       lane,
-      progress_state: 'not_started' as const,
-      assignee: '',
+      progress_state: "not_started" as const,
+      assignee: "",
       due_date: null,
       order_rank: maxRank + 1000,
       created_at: new Date().toISOString(),
@@ -126,30 +134,20 @@ export function HomeTab() {
     >
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
         {[
-          { lane: 'red', title: 'Master / To-Do', color: 'red', tasks: redTasks },
-          { lane: 'yellow', title: 'Pending Approval', color: 'yellow', tasks: yellowTasks },
-          { lane: 'green', title: 'Completed', color: 'green', tasks: greenTasks },
+          { lane: "red", title: "Master / To-Do", color: "red", tasks: redTasks },
+          { lane: "yellow", title: "Pending Approval", color: "yellow", tasks: yellowTasks },
+          { lane: "green", title: "Completed", color: "green", tasks: greenTasks },
         ].map(({ lane, title, color, tasks }) => (
-          <motion.div
+          <Lane
             key={lane}
-            initial={false}
-            animate={{
-              height: collapsed[lane as LaneType] ? 72 : 'auto', // header-only height
-              opacity: collapsed[lane as LaneType] ? 0.96 : 1,
-            }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
-            className="overflow-hidden"
-          >
-            <Lane
-              lane={lane as LaneType}
-              tasks={tasks}
-              title={title}
-              color={color}
-              onAddTask={() => handleAddTask(lane as LaneType)}
-              isCollapsed={collapsed[lane as LaneType]}
-              onToggleCollapse={() => toggleCollapse(lane as LaneType)}
-            />
-          </motion.div>
+            lane={lane as LaneType}
+            tasks={tasks}
+            title={title}
+            color={color}
+            onAddTask={() => handleAddTask(lane as LaneType)}
+            isCollapsed={collapsed[lane as LaneType]}
+            onToggleCollapse={() => toggleCollapse(lane as LaneType)}
+          />
         ))}
       </div>
     </DndContext>
