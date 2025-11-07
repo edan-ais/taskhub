@@ -132,23 +132,26 @@ export function HomeTab() {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
-        {[
-          { lane: "red", title: "Master / To-Do", color: "red", tasks: redTasks },
-          { lane: "yellow", title: "Pending Approval", color: "yellow", tasks: yellowTasks },
-          { lane: "green", title: "Completed", color: "green", tasks: greenTasks },
-        ].map(({ lane, title, color, tasks }) => (
-          <Lane
-            key={lane}
-            lane={lane as LaneType}
-            tasks={tasks}
-            title={title}
-            color={color}
-            onAddTask={() => handleAddTask(lane as LaneType)}
-            isCollapsed={collapsed[lane as LaneType]}
-            onToggleCollapse={() => toggleCollapse(lane as LaneType)}
-          />
-        ))}
+      {/* mobile: push content down to clear 2-row header; desktop: keep as-is */}
+      <div className="pt-[118px] md:pt-0">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
+          {[
+            { lane: "red", title: "Master / To-Do", color: "red", tasks: redTasks },
+            { lane: "yellow", title: "Pending Approval", color: "yellow", tasks: yellowTasks },
+            { lane: "green", title: "Completed", color: "green", tasks: greenTasks },
+          ].map(({ lane, title, color, tasks }) => (
+            <Lane
+              key={lane}
+              lane={lane as LaneType}
+              tasks={tasks}
+              title={title}
+              color={color}
+              onAddTask={() => handleAddTask(lane as LaneType)}
+              isCollapsed={collapsed[lane as LaneType]}
+              onToggleCollapse={() => toggleCollapse(lane as LaneType)}
+            />
+          ))}
+        </div>
       </div>
     </DndContext>
   );
