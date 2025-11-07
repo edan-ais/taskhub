@@ -27,9 +27,7 @@ const laneBorderColors: Record<string, string> = {
 export function TaskCardPeople({ task }: TaskCardPeopleProps) {
   const { setSelectedTask, updateTask } = useAppStore();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({
-      id: task.id,
-    });
+    useSortable({ id: task.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -86,12 +84,12 @@ export function TaskCardPeople({ task }: TaskCardPeopleProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
       onClick={() => setSelectedTask(task)}
-      className={`group relative rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer border-2 flex flex-col justify-between min-h-[250px] max-h-[250px] ${
-        laneBorderColors[task.lane]
-      } ${isOverdue ? 'ring-2 ring-red-500' : ''}`}
+      className={`group relative rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer border-2 flex flex-col justify-between h-[260px] ${laneBorderColors[task.lane]} ${
+        isOverdue ? 'ring-2 ring-red-500' : ''
+      }`}
     >
-      {/* top actions */}
-      <div className="absolute top-2 right-2 flex gap-1 items-center">
+      {/* Top Controls */}
+      <div className="absolute top-2 right-2 flex gap-1 items-center z-10">
         {task.lane === 'red' && (
           <button
             onClick={(e) => handleStatusToggle(e, 'yellow')}
@@ -138,111 +136,123 @@ export function TaskCardPeople({ task }: TaskCardPeopleProps) {
         </button>
       </div>
 
-      {/* body */}
-      <div className="space-y-3 pr-20">
-        {/* title + description (2 lines) */}
-        <div>
-          <h3 className="font-semibold text-slate-800 leading-tight line-clamp-1">
-            {task.title}
-          </h3>
-          {task.description && (
-            <p className="text-sm text-slate-600 mt-1 line-clamp-2">
-              {task.description}
-            </p>
-          )}
-        </div>
-
-        {/* tags: 1 line + +more */}
-        {task.tags && task.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {task.tags.slice(0, 3).map((tag) => (
-              <span
-                key={tag.id}
-                className="text-xs px-2 py-1 rounded-full border"
-                style={{
-                  borderColor: tag.color,
-                  backgroundColor: `${tag.color}20`,
-                  color: tag.color,
-                }}
-              >
-                {tag.name}
-              </span>
-            ))}
-            {task.tags.length > 3 && (
-              <span className="text-xs text-slate-400">
-                +{task.tags.length - 3} more
-              </span>
+      {/* Body grid: ensures consistent layout */}
+      <div className="flex flex-col justify-between h-full">
+        <div className="space-y-2">
+          {/* Title + Description */}
+          <div className="min-h-[48px]">
+            <h3 className="font-semibold text-slate-800 leading-tight line-clamp-1">
+              {task.title}
+            </h3>
+            {task.description ? (
+              <p className="text-sm text-slate-600 mt-1 line-clamp-2">
+                {task.description}
+              </p>
+            ) : (
+              <div className="text-sm text-transparent mt-1 select-none">-</div>
             )}
           </div>
-        )}
 
-        {/* subtasks: 2 lines + +more */}
-        {totalSubtasks > 0 && (
-          <div className="space-y-1">
-            <div className="text-xs font-medium text-slate-600">
-              Subtasks ({completedSubtasks}/{totalSubtasks})
-            </div>
-            <div className="space-y-1">
-              {task.subtasks?.slice(0, 2).map((subtask) => (
-                <div
-                  key={subtask.id}
-                  className="flex items-center gap-2 text-xs truncate"
-                >
-                  <input
-                    type="checkbox"
-                    checked={subtask.progress_state === 'completed'}
-                    onChange={(e) =>
-                      handleSubtaskToggle(
-                        e,
-                        subtask.id,
-                        subtask.progress_state === 'completed'
-                      )
-                    }
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-3 h-3 rounded border-slate-300"
-                  />
+          {/* Tags */}
+          <div className="min-h-[28px]">
+            {task.tags && task.tags.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {task.tags.slice(0, 3).map((tag) => (
                   <span
-                    className={`flex-1 ${
-                      subtask.progress_state === 'completed'
-                        ? 'line-through text-slate-400'
-                        : 'text-slate-700'
-                    }`}
+                    key={tag.id}
+                    className="text-xs px-2 py-1 rounded-full border"
+                    style={{
+                      borderColor: tag.color,
+                      backgroundColor: `${tag.color}20`,
+                      color: tag.color,
+                    }}
                   >
-                    {subtask.title}
+                    {tag.name}
                   </span>
-                </div>
-              ))}
-              {totalSubtasks > 2 && (
-                <div className="text-xs text-slate-400 pl-5">
-                  +{totalSubtasks - 2} more
-                </div>
-              )}
-            </div>
+                ))}
+                {task.tags.length > 3 && (
+                  <span className="text-xs text-slate-400">
+                    +{task.tags.length - 3} more
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-transparent select-none">-</div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* footer pinned to bottom */}
-      <div className="flex items-center justify-between text-xs text-slate-600 mt-2 pt-2 border-t border-slate-200">
-        {task.assignee ? (
-          <div className="flex items-center gap-1">
-            <User size={14} />
-            <span>{task.assignee}</span>
+          {/* Subtasks */}
+          <div className="min-h-[48px]">
+            {totalSubtasks > 0 ? (
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-slate-600">
+                  Subtasks ({completedSubtasks}/{totalSubtasks})
+                </div>
+                <div className="space-y-1">
+                  {task.subtasks?.slice(0, 2).map((subtask) => (
+                    <div
+                      key={subtask.id}
+                      className="flex items-center gap-2 text-xs truncate"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={subtask.progress_state === 'completed'}
+                        onChange={(e) =>
+                          handleSubtaskToggle(
+                            e,
+                            subtask.id,
+                            subtask.progress_state === 'completed'
+                          )
+                        }
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-3 h-3 rounded border-slate-300"
+                      />
+                      <span
+                        className={`flex-1 ${
+                          subtask.progress_state === 'completed'
+                            ? 'line-through text-slate-400'
+                            : 'text-slate-700'
+                        }`}
+                      >
+                        {subtask.title}
+                      </span>
+                    </div>
+                  ))}
+                  {totalSubtasks > 2 && (
+                    <div className="text-xs text-slate-400 pl-5">
+                      +{totalSubtasks - 2} more
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-transparent select-none">-</div>
+            )}
           </div>
-        ) : (
-          <div className="text-slate-400 italic">Unassigned</div>
-        )}
-        {task.due_date && (
-          <div
-            className={`flex items-center gap-1 ${
-              isOverdue ? 'text-red-600 font-semibold' : ''
-            }`}
-          >
-            {isOverdue && <AlertCircle size={14} />}
-            <Calendar size={14} />
-            <span>{format(parseISO(task.due_date), 'MMM d')}</span>
-          </div>
-        )}
+        </div>
+
+        {/* Footer pinned */}
+        <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-200 mt-auto">
+          {task.assignee ? (
+            <div className="flex items-center gap-1">
+              <User size={14} />
+              <span>{task.assignee}</span>
+            </div>
+          ) : (
+            <div className="text-slate-400 italic">Unassigned</div>
+          )}
+          {task.due_date && (
+            <div
+              className={`flex items-center gap-1 ${
+                isOverdue ? 'text-red-600 font-semibold' : ''
+              }`}
+            >
+              {isOverdue && <AlertCircle size={14} />}
+              <Calendar size={14} />
+              <span>{format(parseISO(task.due_date), 'MMM d')}</span>
+            </div>
+          )}
+        </div>
       </div>
     </motion.div>
   );
