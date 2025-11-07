@@ -18,28 +18,46 @@ export function BottomNavigation() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t-2 border-slate-200 shadow-lg">
       <div className="max-w-[1920px] mx-auto px-2">
-        <div className="flex items-center justify-around h-16">
+        <div className="flex items-center justify-around h-16 relative">
+          {/* Animated background pill (shared layoutId) */}
+          <div className="absolute inset-0 flex items-center justify-around pointer-events-none">
+            {tabs.map((tab) =>
+              activeTab === tab.id ? (
+                <motion.div
+                  key={tab.id}
+                  layoutId="activeTabPill"
+                  className="absolute mx-2 my-1 rounded-2xl"
+                  style={{
+                    backgroundColor: `${tab.color}33`,
+                    width: 'calc(100% / 6 - 0.75rem)',
+                    height: 'calc(100% - 0.5rem)',
+                  }}
+                  transition={{
+                    layout: {
+                      type: 'spring',
+                      stiffness: 350,
+                      damping: 35,
+                      mass: 0.5,
+                    },
+                    opacity: { duration: 0.2 },
+                    scale: { duration: 0.25 },
+                  }}
+                  initial={{ opacity: 0.8, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                />
+              ) : null
+            )}
+          </div>
+
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
-
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className="relative flex flex-col items-center justify-center flex-1 h-full transition-colors overflow-hidden"
               >
-                {/* Animated pill background for active tab */}
-                {isActive && (
-                  <motion.div
-                    layoutId="activeTabPill"
-                    className="absolute inset-0 mx-2 my-1 rounded-2xl"
-                    style={{
-                      backgroundColor: `${tab.color}33`, // ~20% opacity version
-                    }}
-                    transition={{ type: 'spring', bounce: 0.25, duration: 0.5 }}
-                  />
-                )}
-
                 <div
                   className="relative z-10 transition-colors"
                   style={{ color: isActive ? tab.color : '#64748B' }}
