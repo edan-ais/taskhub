@@ -1,6 +1,13 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Calendar, User, AlertCircle, Check, CheckCheck } from 'lucide-react';
+import {
+  GripVertical,
+  Calendar,
+  User,
+  AlertCircle,
+  Check,
+  CheckCheck,
+} from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format, isPast, parseISO } from 'date-fns';
 import type { Task } from '../lib/types';
@@ -11,7 +18,7 @@ interface TaskCardPeopleProps {
   task: Task;
 }
 
-const laneBorderColors = {
+const laneBorderColors: Record<string, string> = {
   red: 'border-red-500 bg-red-50',
   yellow: 'border-yellow-500 bg-yellow-50',
   green: 'border-green-500 bg-green-50',
@@ -19,9 +26,10 @@ const laneBorderColors = {
 
 export function TaskCardPeople({ task }: TaskCardPeopleProps) {
   const { setSelectedTask, updateTask } = useAppStore();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: task.id,
-  });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({
+      id: task.id,
+    });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -29,24 +37,44 @@ export function TaskCardPeople({ task }: TaskCardPeopleProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const isOverdue = task.due_date && isPast(parseISO(task.due_date)) && task.lane !== 'green';
-  const completedSubtasks = task.subtasks?.filter((st) => st.progress_state === 'completed').length || 0;
+  const isOverdue =
+    task.due_date &&
+    isPast(parseISO(task.due_date)) &&
+    task.lane !== 'green';
+
+  const completedSubtasks =
+    task.subtasks?.filter((st) => st.progress_state === 'completed').length || 0;
   const totalSubtasks = task.subtasks?.length || 0;
 
-  const handleStatusToggle = async (e: React.MouseEvent, targetLane: 'yellow' | 'green' | 'red') => {
+  const handleStatusToggle = async (
+    e: React.MouseEvent,
+    targetLane: 'yellow' | 'green' | 'red'
+  ) => {
     e.stopPropagation();
-    const maxOrderRank = 1000000;
+    const maxOrderRank = 1_000_000;
     await moveTask(task.id, targetLane, maxOrderRank);
     updateTask(task.id, { lane: targetLane });
   };
 
-  const handleSubtaskToggle = async (e: React.MouseEvent, subtaskId: string, isCompleted: boolean) => {
+  const handleSubtaskToggle = async (
+    e: React.MouseEvent,
+    subtaskId: string,
+    isCompleted: boolean
+  ) => {
     e.stopPropagation();
-    await updateSubtask(subtaskId, { progress_state: isCompleted ? 'not_started' : 'completed' });
+    await updateSubtask(subtaskId, {
+      progress_state: isCompleted ? 'not_started' : 'completed',
+    });
     updateTask(task.id, {
-      subtasks: task.subtasks?.map((st) =>
-        st.id === subtaskId ? { ...st, progress_state: isCompleted ? 'not_started' : 'completed' } : st
-      ),
+      subtasks:
+        task.subtasks?.map((st) =>
+          st.id === subtaskId
+            ? {
+                ...st,
+                progress_state: isCompleted ? 'not_started' : 'completed',
+              }
+            : st
+        ) || [],
     });
   };
 
@@ -58,11 +86,11 @@ export function TaskCardPeople({ task }: TaskCardPeopleProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
       onClick={() => setSelectedTask(task)}
-      className={`group relative rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer border-2 h-[280px] overflow-hidden flex flex-col justify-between ${
+      className={`group relative rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer border-2 flex flex-col justify-between min-h-[250px] max-h-[250px] ${
         laneBorderColors[task.lane]
       } ${isOverdue ? 'ring-2 ring-red-500' : ''}`}
     >
-      {/* Top controls */}
+      {/* top actions */}
       <div className="absolute top-2 right-2 flex gap-1 items-center">
         {task.lane === 'red' && (
           <button
@@ -110,15 +138,21 @@ export function TaskCardPeople({ task }: TaskCardPeopleProps) {
         </button>
       </div>
 
-      {/* Main content */}
-      <div className="space-y-3">
+      {/* body */}
+      <div className="space-y-3 pr-20">
+        {/* title + description (2 lines) */}
         <div>
-          <h3 className="font-semibold text-slate-800 pr-24 leading-tight line-clamp-1">{task.title}</h3>
+          <h3 className="font-semibold text-slate-800 leading-tight line-clamp-1">
+            {task.title}
+          </h3>
           {task.description && (
-            <p className="text-sm text-slate-600 mt-1 line-clamp-2">{task.description}</p>
+            <p className="text-sm text-slate-600 mt-1 line-clamp-2">
+              {task.description}
+            </p>
           )}
         </div>
 
+        {/* tags: 1 line + +more */}
         {task.tags && task.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {task.tags.slice(0, 3).map((tag) => (
@@ -135,11 +169,14 @@ export function TaskCardPeople({ task }: TaskCardPeopleProps) {
               </span>
             ))}
             {task.tags.length > 3 && (
-              <span className="text-xs text-slate-400">+{task.tags.length - 3} more</span>
+              <span className="text-xs text-slate-400">
+                +{task.tags.length - 3} more
+              </span>
             )}
           </div>
         )}
 
+        {/* subtasks: 2 lines + +more */}
         {totalSubtasks > 0 && (
           <div className="space-y-1">
             <div className="text-xs font-medium text-slate-600">
@@ -147,11 +184,20 @@ export function TaskCardPeople({ task }: TaskCardPeopleProps) {
             </div>
             <div className="space-y-1">
               {task.subtasks?.slice(0, 2).map((subtask) => (
-                <div key={subtask.id} className="flex items-center gap-2 text-xs truncate">
+                <div
+                  key={subtask.id}
+                  className="flex items-center gap-2 text-xs truncate"
+                >
                   <input
                     type="checkbox"
                     checked={subtask.progress_state === 'completed'}
-                    onChange={(e) => handleSubtaskToggle(e, subtask.id, subtask.progress_state === 'completed')}
+                    onChange={(e) =>
+                      handleSubtaskToggle(
+                        e,
+                        subtask.id,
+                        subtask.progress_state === 'completed'
+                      )
+                    }
                     onClick={(e) => e.stopPropagation()}
                     className="w-3 h-3 rounded border-slate-300"
                   />
@@ -174,23 +220,29 @@ export function TaskCardPeople({ task }: TaskCardPeopleProps) {
             </div>
           </div>
         )}
+      </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between text-xs text-slate-600">
-          {task.assignee && (
-            <div className="flex items-center gap-1">
-              <User size={14} />
-              <span>{task.assignee}</span>
-            </div>
-          )}
-          {task.due_date && (
-            <div className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-semibold' : ''}`}>
-              {isOverdue && <AlertCircle size={14} />}
-              <Calendar size={14} />
-              <span>{format(parseISO(task.due_date), 'MMM d')}</span>
-            </div>
-          )}
-        </div>
+      {/* footer pinned to bottom */}
+      <div className="flex items-center justify-between text-xs text-slate-600 mt-2 pt-2 border-t border-slate-200">
+        {task.assignee ? (
+          <div className="flex items-center gap-1">
+            <User size={14} />
+            <span>{task.assignee}</span>
+          </div>
+        ) : (
+          <div className="text-slate-400 italic">Unassigned</div>
+        )}
+        {task.due_date && (
+          <div
+            className={`flex items-center gap-1 ${
+              isOverdue ? 'text-red-600 font-semibold' : ''
+            }`}
+          >
+            {isOverdue && <AlertCircle size={14} />}
+            <Calendar size={14} />
+            <span>{format(parseISO(task.due_date), 'MMM d')}</span>
+          </div>
+        )}
       </div>
     </motion.div>
   );
