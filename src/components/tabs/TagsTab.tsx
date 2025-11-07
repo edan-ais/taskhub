@@ -402,7 +402,7 @@ export function TagsTab() {
                   className="p-1.5 hover:bg-slate-100 rounded text-slate-500"
                   title="Move down"
                 >
-                  <ArrowRight className="-rotate-90" size={14} />
+                  <ArrowRight className="rotate-90" size={14} />
                 </button>
               </div>
 
