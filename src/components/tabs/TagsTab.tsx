@@ -32,6 +32,9 @@ export function TagsTab() {
     updateDivision,
     removeDivision,
     showDeleteConfirmation,
+    // ⬇️ these were missing; we need them to update local order
+    setTags,
+    setDivisions,
   } = useAppStore();
 
   const { fetchTasks } = useData();
@@ -121,7 +124,10 @@ export function TagsTab() {
      TAG CRUD
   ------------------------------------------------ */
   const handleAddTag = async () => {
-    if (!newTagName.trim()) return setShowAddTag(false);
+    if (!newTagName.trim()) {
+      setShowAddTag(false);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from("tags")
@@ -133,10 +139,13 @@ export function TagsTab() {
         .select()
         .single();
       if (error) throw error;
-      if (data) addTag(data);
+      if (data) {
+        addTag(data);
+      }
     } catch (e) {
       console.error("Error adding tag:", e);
     } finally {
+      // close + reset
       setShowAddTag(false);
       setNewTagName("");
       setNewTagColor("#3B82F6");
@@ -152,12 +161,15 @@ export function TagsTab() {
   const handleSaveEditTag = async () => {
     if (!editingTag) return;
     try {
+      const updates = { name: editTagName, color: editTagColor };
       const { error } = await supabase
         .from("tags")
-        .update({ name: editTagName, color: editTagColor })
+        .update(updates)
         .eq("id", editingTag.id);
       if (error) throw error;
-      updateTag(editingTag.id, { name: editTagName, color: editTagColor });
+
+      // update local store so UI reflects immediately
+      updateTag(editingTag.id, updates);
     } catch (e) {
       console.error("Error saving tag:", e);
     } finally {
@@ -172,14 +184,24 @@ export function TagsTab() {
     const newIndex = direction === "up" ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= tags.length) return;
 
+    // local reorder
     const reordered = [...tags];
     const [moved] = reordered.splice(index, 1);
     reordered.splice(newIndex, 0, moved);
 
-    // update order in DB
-    reordered.forEach((t, i) =>
-      supabase.from("tags").update({ order_index: i }).eq("id", t.id)
-    );
+    // update local store right away
+    setTags(reordered);
+
+    // persist order to supabase
+    try {
+      await Promise.all(
+        reordered.map((t, i) =>
+          supabase.from("tags").update({ order_index: i }).eq("id", t.id)
+        )
+      );
+    } catch (e) {
+      console.error("Error reordering tags:", e);
+    }
   };
 
   const handleDeleteTag = (id: string, name: string) => {
@@ -199,7 +221,10 @@ export function TagsTab() {
      DIVISION CRUD
   ------------------------------------------------ */
   const handleAddDivision = async () => {
-    if (!newDivisionName.trim()) return setShowAddDivision(false);
+    if (!newDivisionName.trim()) {
+      setShowAddDivision(false);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from("divisions")
@@ -211,7 +236,9 @@ export function TagsTab() {
         .select()
         .single();
       if (error) throw error;
-      if (data) addDivision(data);
+      if (data) {
+        addDivision(data);
+      }
     } catch (e) {
       console.error("Error adding division:", e);
     } finally {
@@ -230,15 +257,14 @@ export function TagsTab() {
   const handleSaveEditDivision = async () => {
     if (!editingDivision) return;
     try {
+      const updates = { name: editDivisionName, color: editDivisionColor };
       const { error } = await supabase
         .from("divisions")
-        .update({ name: editDivisionName, color: editDivisionColor })
+        .update(updates)
         .eq("id", editingDivision.id);
       if (error) throw error;
-      updateDivision(editingDivision.id, {
-        name: editDivisionName,
-        color: editDivisionColor,
-      });
+
+      updateDivision(editingDivision.id, updates);
     } catch (e) {
       console.error("Error saving division:", e);
     } finally {
@@ -257,9 +283,18 @@ export function TagsTab() {
     const [moved] = reordered.splice(index, 1);
     reordered.splice(newIndex, 0, moved);
 
-    reordered.forEach((d, i) =>
-      supabase.from("divisions").update({ order_index: i }).eq("id", d.id)
-    );
+    // update local store immediately
+    setDivisions(reordered);
+
+    try {
+      await Promise.all(
+        reordered.map((d, i) =>
+          supabase.from("divisions").update({ order_index: i }).eq("id", d.id)
+        )
+      );
+    } catch (e) {
+      console.error("Error reordering divisions:", e);
+    }
   };
 
   const handleDeleteDivision = (id: string, name: string) => {
@@ -299,47 +334,42 @@ export function TagsTab() {
     const isEditing = editingItem?.id === item.id;
     return (
       <div
-        className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all select-none shadow-sm relative ${
-          isActive
-            ? "bg-blue-50"
-            : "bg-slate-50 hover:border-blue-300"
-        }`}
+        className="flex items-center justify-between p-3 rounded-lg border-2 transition-all select-none shadow-sm relative bg-slate-50 hover:border-blue-300"
         style={{
           borderColor: isActive ? item.color : "#E2E8F0",
-          boxShadow: isActive
-            ? `0 0 0 3px ${item.color} inset`
-            : "0 0 0 0 transparent",
+          // fake thick border without changing layout
+          boxShadow: isActive ? `0 0 0 3px ${item.color} inset` : "none",
         }}
       >
         {isEditing ? (
-          <>
-            <input
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              className="flex-1 px-2 py-1 rounded border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              autoFocus
-            />
-            <input
-              type="color"
-              value={editColor}
-              onChange={(e) => setEditColor(e.target.value)}
-              className="w-10 h-8 rounded cursor-pointer ml-2"
-            />
-            <div className="flex gap-1 ml-2">
-              <button
-                onClick={onSaveEdit}
-                className="p-1.5 rounded bg-green-100 text-green-700 hover:bg-green-200"
-              >
-                <Check size={14} />
-              </button>
-              <button
-                onClick={onCancelEdit}
-                className="p-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          </>
+            <>
+              <input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="flex-1 px-2 py-1 rounded border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+              <input
+                type="color"
+                value={editColor}
+                onChange={(e) => setEditColor(e.target.value)}
+                className="w-10 h-8 rounded cursor-pointer ml-2"
+              />
+              <div className="flex gap-1 ml-2">
+                <button
+                  onClick={onSaveEdit}
+                  className="p-1.5 rounded bg-green-100 text-green-700 hover:bg-green-200"
+                >
+                  <Check size={14} />
+                </button>
+                <button
+                  onClick={onCancelEdit}
+                  className="p-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </>
         ) : (
           <>
             <div
@@ -596,7 +626,9 @@ export function TagsTab() {
                       key={task.id}
                       task={task}
                       onUpdate={(updates) => handleUpdateTask(task.id, updates)}
-                      onReorder={(lane, newOrder) => handleReorderTask(lane, newOrder)}
+                      onReorder={(laneName, newOrder) =>
+                        handleReorderTask(laneName, newOrder)
+                      }
                     />
                   ))}
                   {laneTasks.length === 0 && (
