@@ -5,7 +5,8 @@ import {
   Plus,
   Edit2,
   Trash2,
-  GripVertical,
+  ArrowUp,
+  ArrowDown,
   ChevronDown,
   ChevronRight,
   X,
@@ -15,160 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../../lib/store';
 import { TaskCardPeople as TaskCard } from '../TaskCardPeople';
 import { supabase } from '../../lib/supabase';
-import { DndContext, closestCenter } from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
-/* =========================================================
-   SORTABLE ITEM (supports view mode + edit mode)
-========================================================= */
-function SortableItem({
-  item,
-  onClick,
-  isActive,
-  type,
-  onDelete,
-  onStartEdit,
-  isEditing,
-  editName,
-  editColor,
-  onEditNameChange,
-  onEditColorChange,
-  onSaveEdit,
-  onCancelEdit,
-}: any) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
-    id: item.id,
-  });
-  const style = { transform: CSS.Transform.toString(transform), transition };
-
-  // EDIT MODE
-  if (isEditing) {
-    return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        className="flex items-center gap-2 p-3 rounded-lg border-2 border-blue-400 bg-blue-50"
-      >
-        {/* keep handle so user sees it's still reorderable */}
-        <div
-          {...attributes}
-          {...listeners}
-          onClick={(e) => e.stopPropagation()}
-          className="p-1.5 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing"
-          title="Drag to reorder"
-        >
-          <GripVertical size={16} />
-        </div>
-        <input
-          value={editName}
-          onChange={(e) => onEditNameChange(e.target.value)}
-          className="flex-1 px-2 py-1 rounded border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder={type === 'tag' ? 'Tag name' : 'Division name'}
-          autoFocus
-        />
-        <input
-          type="color"
-          value={editColor}
-          onChange={(e) => onEditColorChange(e.target.value)}
-          className="w-10 h-8 rounded cursor-pointer"
-        />
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onSaveEdit();
-          }}
-          className="p-1.5 rounded bg-green-100 text-green-700 hover:bg-green-200"
-          title="Save"
-        >
-          <Check size={14} />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onCancelEdit();
-          }}
-          className="p-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200"
-          title="Cancel"
-        >
-          <X size={14} />
-        </button>
-      </div>
-    );
-  }
-
-  // VIEW MODE
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all select-none shadow-sm ${
-        isActive
-          ? 'border-4 border-blue-400 bg-blue-50'
-          : 'border-slate-200 bg-slate-50 hover:border-blue-300'
-      }`}
-    >
-      {/* Drag handle only */}
-      <div
-        {...attributes}
-        {...listeners}
-        onClick={(e) => e.stopPropagation()}
-        className="p-1.5 mr-2 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing"
-        title="Drag to reorder"
-      >
-        <GripVertical size={16} />
-      </div>
-
-      {/* Clickable body (filters) */}
-      <div
-        className="flex-1 flex items-center gap-2 cursor-pointer min-w-0"
-        onClick={() => onClick?.(item.id)}
-      >
-        <div
-          className="w-6 h-6 rounded-full border-2 shrink-0"
-          style={{ backgroundColor: item.color, borderColor: item.color }}
-        />
-        <div className="min-w-0">
-          <div className="font-medium text-slate-800 truncate">{item.name}</div>
-          <div className="text-xs text-slate-500">{item.taskCount} task(s)</div>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-1 ml-2 shrink-0">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onStartEdit(item);
-          }}
-          className="p-1.5 hover:bg-blue-100 rounded text-blue-600"
-          title={`Edit ${type}`}
-        >
-          <Edit2 size={14} />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(item.id, item.name);
-          }}
-          className="p-1.5 hover:bg-red-100 rounded text-red-600"
-          title={`Delete ${type}`}
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* =========================================================
-   MAIN COMPONENT
-========================================================= */
 export function TagsTab() {
   const {
     tasks,
@@ -185,38 +33,38 @@ export function TagsTab() {
     showDeleteConfirmation,
   } = useAppStore();
 
-  // filters
+  // Filter selections
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [selectedDivision, setSelectedDivision] = useState<string | null>(null);
 
-  // add tag form
+  // Add Tag form
   const [showAddTag, setShowAddTag] = useState(false);
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#3B82F6');
 
-  // edit tag
+  // Edit Tag
   const [editingTag, setEditingTag] = useState<any>(null);
   const [editTagName, setEditTagName] = useState('');
   const [editTagColor, setEditTagColor] = useState('');
 
-  // add division form
+  // Add Division form
   const [showAddDivision, setShowAddDivision] = useState(false);
   const [newDivisionName, setNewDivisionName] = useState('');
   const [newDivisionColor, setNewDivisionColor] = useState('#8B5CF6');
 
-  // edit division
+  // Edit Division
   const [editingDivision, setEditingDivision] = useState<any>(null);
   const [editDivisionName, setEditDivisionName] = useState('');
   const [editDivisionColor, setEditDivisionColor] = useState('');
 
-  // lanes
+  // Collapsible lanes
   const [collapsedLanes, setCollapsedLanes] = useState<Record<string, boolean>>({
     red: false,
     yellow: false,
     green: false,
   });
 
-  /* ------------------ FILTER TASKS ------------------ */
+  /* ------------------- Filtered Tasks ------------------- */
   const filteredTasks = tasks.filter(
     (task) =>
       (task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -226,12 +74,12 @@ export function TagsTab() {
 
   const displayedTasks = useMemo(() => {
     let result = filteredTasks;
-    if (selectedTag) {
+    if (selectedTag)
       result = result.filter((t) => t.tags?.some((tg) => tg.id === selectedTag));
-    }
-    if (selectedDivision) {
-      result = result.filter((t) => t.divisions?.some((d) => d.id === selectedDivision));
-    }
+    if (selectedDivision)
+      result = result.filter((t) =>
+        t.divisions?.some((d) => d.id === selectedDivision)
+      );
     return result;
   }, [filteredTasks, selectedTag, selectedDivision]);
 
@@ -244,31 +92,23 @@ export function TagsTab() {
   const toggleLane = (lane: string) =>
     setCollapsedLanes((prev) => ({ ...prev, [lane]: !prev[lane] }));
 
-  /* ------------------ TAG CRUD ------------------ */
+  /* ------------------- TAG CRUD ------------------- */
   const handleAddTag = async () => {
-    if (!newTagName.trim()) {
-      setShowAddTag(false);
-      return;
-    }
-
-    // try to insert, but close form regardless
+    if (!newTagName.trim()) return setShowAddTag(false);
     try {
       const { data, error } = await supabase
         .from('tags')
         .insert({ name: newTagName, color: newTagColor, order_index: tags.length })
         .select()
         .single();
-
       if (error) throw error;
-      if (data) {
-        addTag(data);
-      }
-    } catch (err) {
-      console.error('Error creating tag:', err);
+      if (data) addTag(data);
+    } catch (e) {
+      console.error('Error adding tag:', e);
     } finally {
+      setShowAddTag(false);
       setNewTagName('');
       setNewTagColor('#3B82F6');
-      setShowAddTag(false);
     }
   };
 
@@ -285,11 +125,10 @@ export function TagsTab() {
         .from('tags')
         .update({ name: editTagName, color: editTagColor })
         .eq('id', editingTag.id);
-
       if (error) throw error;
       updateTag(editingTag.id, { name: editTagName, color: editTagColor });
-    } catch (err) {
-      console.error('Error updating tag:', err);
+    } catch (e) {
+      console.error('Error saving tag edit:', e);
     } finally {
       setEditingTag(null);
       setEditTagName('');
@@ -297,10 +136,18 @@ export function TagsTab() {
     }
   };
 
-  const handleCancelEditTag = () => {
-    setEditingTag(null);
-    setEditTagName('');
-    setEditTagColor('');
+  const handleMoveTag = async (id: string, direction: 'up' | 'down') => {
+    const index = tags.findIndex((t) => t.id === id);
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= tags.length) return;
+    const reordered = [...tags];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(newIndex, 0, moved);
+    reordered.forEach((t, i) =>
+      supabase.from('tags').update({ order_index: i }).eq('id', t.id)
+    );
+    reordered.forEach((t, i) => (t.order_index = i));
+    updateTag(id, reordered.find((t) => t.id === id) || {});
   };
 
   const handleDeleteTag = (id: string, name: string) => {
@@ -309,38 +156,16 @@ export function TagsTab() {
       'Delete Tag',
       `Delete "${name}"? It will be removed from ${tasksWithTag.length} task(s).`,
       async () => {
-        try {
-          await supabase.from('tags').delete().eq('id', id);
-          removeTag(id);
-          if (selectedTag === id) setSelectedTag(null);
-        } catch (err) {
-          console.error('Error deleting tag:', err);
-        }
+        await supabase.from('tags').delete().eq('id', id);
+        removeTag(id);
+        if (selectedTag === id) setSelectedTag(null);
       }
     );
   };
 
-  const handleTagDragEnd = async (e: any) => {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = tags.findIndex((t) => t.id === active.id);
-    const newIndex = tags.findIndex((t) => t.id === over.id);
-    const reordered = arrayMove(tags, oldIndex, newIndex);
-
-    // optimistic order update
-    reordered.forEach((t, i) => {
-      supabase.from('tags').update({ order_index: i }).eq('id', t.id);
-    });
-  };
-
-  /* ------------------ DIVISION CRUD ------------------ */
+  /* ------------------- DIVISION CRUD ------------------- */
   const handleAddDivision = async () => {
-    if (!newDivisionName.trim()) {
-      setShowAddDivision(false);
-      return;
-    }
-
+    if (!newDivisionName.trim()) return setShowAddDivision(false);
     try {
       const { data, error } = await supabase
         .from('divisions')
@@ -351,17 +176,14 @@ export function TagsTab() {
         })
         .select()
         .single();
-
       if (error) throw error;
-      if (data) {
-        addDivision(data);
-      }
-    } catch (err) {
-      console.error('Error creating division:', err);
+      if (data) addDivision(data);
+    } catch (e) {
+      console.error('Error adding division:', e);
     } finally {
+      setShowAddDivision(false);
       setNewDivisionName('');
       setNewDivisionColor('#8B5CF6');
-      setShowAddDivision(false);
     }
   };
 
@@ -378,14 +200,13 @@ export function TagsTab() {
         .from('divisions')
         .update({ name: editDivisionName, color: editDivisionColor })
         .eq('id', editingDivision.id);
-
       if (error) throw error;
       updateDivision(editingDivision.id, {
         name: editDivisionName,
         color: editDivisionColor,
       });
-    } catch (err) {
-      console.error('Error updating division:', err);
+    } catch (e) {
+      console.error('Error saving division edit:', e);
     } finally {
       setEditingDivision(null);
       setEditDivisionName('');
@@ -393,10 +214,18 @@ export function TagsTab() {
     }
   };
 
-  const handleCancelEditDivision = () => {
-    setEditingDivision(null);
-    setEditDivisionName('');
-    setEditDivisionColor('');
+  const handleMoveDivision = async (id: string, direction: 'up' | 'down') => {
+    const index = divisions.findIndex((d) => d.id === id);
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= divisions.length) return;
+    const reordered = [...divisions];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(newIndex, 0, moved);
+    reordered.forEach((d, i) =>
+      supabase.from('divisions').update({ order_index: i }).eq('id', d.id)
+    );
+    reordered.forEach((d, i) => (d.order_index = i));
+    updateDivision(id, reordered.find((d) => d.id === id) || {});
   };
 
   const handleDeleteDivision = (id: string, name: string) => {
@@ -405,46 +234,130 @@ export function TagsTab() {
       'Delete Division',
       `Delete "${name}"? It will be removed from ${tasksWithDivision.length} task(s).`,
       async () => {
-        try {
-          await supabase.from('divisions').delete().eq('id', id);
-          removeDivision(id);
-          if (selectedDivision === id) setSelectedDivision(null);
-        } catch (err) {
-          console.error('Error deleting division:', err);
-        }
+        await supabase.from('divisions').delete().eq('id', id);
+        removeDivision(id);
+        if (selectedDivision === id) setSelectedDivision(null);
       }
     );
   };
 
-  const handleDivisionDragEnd = async (e: any) => {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
+  /* ------------------- RENDER CARD ------------------- */
+  const renderItem = (
+    item: any,
+    type: 'tag' | 'division',
+    isActive: boolean,
+    onEditStart: any,
+    onEditSave: any,
+    onEditCancel: any,
+    isEditing: boolean,
+    editName: string,
+    editColor: string,
+    setEditName: any,
+    setEditColor: any,
+    onMove: any,
+    onDelete: any,
+    onClick: any
+  ) => (
+    <div
+      className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all select-none shadow-sm ${
+        isActive
+          ? 'border-4 border-blue-400 bg-blue-50'
+          : 'border-slate-200 bg-slate-50 hover:border-blue-300'
+      }`}
+    >
+      {isEditing ? (
+        <>
+          <input
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            className="flex-1 px-2 py-1 rounded border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            autoFocus
+          />
+          <input
+            type="color"
+            value={editColor}
+            onChange={(e) => setEditColor(e.target.value)}
+            className="w-10 h-8 rounded cursor-pointer ml-2"
+          />
+          <div className="flex gap-1 ml-2">
+            <button
+              onClick={onEditSave}
+              className="p-1.5 rounded bg-green-100 text-green-700 hover:bg-green-200"
+            >
+              <Check size={14} />
+            </button>
+            <button
+              onClick={onEditCancel}
+              className="p-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div
+            className="flex-1 flex items-center gap-2 cursor-pointer min-w-0"
+            onClick={() => onClick(item.id)}
+          >
+            <div
+              className="w-6 h-6 rounded-full border-2 shrink-0"
+              style={{ backgroundColor: item.color, borderColor: item.color }}
+            />
+            <div className="min-w-0">
+              <div className="font-medium text-slate-800 truncate">{item.name}</div>
+              <div className="text-xs text-slate-500">{item.taskCount} task(s)</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 ml-2 shrink-0">
+            <button
+              onClick={() => onMove(item.id, 'up')}
+              className="p-1.5 hover:bg-slate-100 rounded text-slate-500"
+              title="Move up"
+            >
+              <ArrowUp size={14} />
+            </button>
+            <button
+              onClick={() => onMove(item.id, 'down')}
+              className="p-1.5 hover:bg-slate-100 rounded text-slate-500"
+              title="Move down"
+            >
+              <ArrowDown size={14} />
+            </button>
+            <button
+              onClick={() => onEditStart(item)}
+              className="p-1.5 hover:bg-blue-100 rounded text-blue-600"
+              title="Edit"
+            >
+              <Edit2 size={14} />
+            </button>
+            <button
+              onClick={() => onDelete(item.id, item.name)}
+              className="p-1.5 hover:bg-red-100 rounded text-red-600"
+              title="Delete"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 
-    const oldIndex = divisions.findIndex((d) => d.id === active.id);
-    const newIndex = divisions.findIndex((d) => d.id === over.id);
-    const reordered = arrayMove(divisions, oldIndex, newIndex);
-
-    reordered.forEach((d, i) => {
-      supabase.from('divisions').update({ order_index: i }).eq('id', d.id);
-    });
-  };
-
-  /* ------------------ RENDER ------------------ */
+  /* ------------------- RENDER ------------------- */
   return (
     <div className="space-y-10">
       {/* TAG MANAGEMENT */}
       <div className="bg-white rounded-xl p-6 border-2 border-slate-300 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <TagIcon size={28} />
-            Tag Management
+            <TagIcon size={28} /> Tag Management
           </h2>
           <button
             onClick={() => setShowAddTag(true)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg border-2 border-blue-700 hover:bg-blue-700"
           >
-            <Plus size={18} />
-            Add Tag
+            <Plus size={18} /> Add Tag
           </button>
         </div>
 
@@ -483,57 +396,45 @@ export function TagsTab() {
           </div>
         )}
 
-        <DndContext collisionDetection={closestCenter} onDragEnd={handleTagDragEnd}>
-          <SortableContext items={tags.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {tags.map((t) => (
-                <SortableItem
-                  key={t.id}
-                  item={{
-                    ...t,
-                    taskCount: tasks.filter((task) =>
-                      task.tags?.some((tg) => tg.id === t.id)
-                    ).length,
-                  }}
-                  onClick={(id: string) =>
-                    setSelectedTag((prev) => (prev === id ? null : id))
-                  }
-                  isActive={selectedTag === t.id}
-                  type="tag"
-                  onDelete={handleDeleteTag}
-                  onStartEdit={handleStartEditTag}
-                  isEditing={editingTag?.id === t.id}
-                  editName={editTagName}
-                  editColor={editTagColor}
-                  onEditNameChange={setEditTagName}
-                  onEditColorChange={setEditTagColor}
-                  onSaveEdit={handleSaveEditTag}
-                  onCancelEdit={handleCancelEditTag}
-                />
-              ))}
-              {tags.length === 0 && (
-                <div className="col-span-full text-center py-6 text-slate-400">
-                    No tags yet.
-                </div>
-              )}
-            </div>
-          </SortableContext>
-        </DndContext>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {tags.map((t) =>
+            renderItem(
+              {
+                ...t,
+                taskCount: tasks.filter((task) =>
+                  task.tags?.some((tg) => tg.id === t.id)
+                ).length,
+              },
+              'tag',
+              selectedTag === t.id,
+              handleStartEditTag,
+              handleSaveEditTag,
+              () => setEditingTag(null),
+              editingTag?.id === t.id,
+              editTagName,
+              editTagColor,
+              setEditTagName,
+              setEditTagColor,
+              handleMoveTag,
+              handleDeleteTag,
+              (id: string) =>
+                setSelectedTag((prev) => (prev === id ? null : id))
+            )
+          )}
+        </div>
       </div>
 
       {/* DIVISION MANAGEMENT */}
       <div className="bg-white rounded-xl p-6 border-2 border-slate-300 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <Layers size={28} />
-            Division Management
+            <Layers size={28} /> Division Management
           </h2>
           <button
             onClick={() => setShowAddDivision(true)}
             className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg border-2 border-violet-700 hover:bg-violet-700"
           >
-            <Plus size={18} />
-            Add Division
+            <Plus size={18} /> Add Division
           </button>
         </div>
 
