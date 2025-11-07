@@ -91,9 +91,6 @@ export function TagsTab() {
   const toggleLane = (lane: string) =>
     setCollapsedLanes((prev) => ({ ...prev, [lane]: !prev[lane] }));
 
-  /* ------------------------------------------------
-     TAG CRUD
-  ------------------------------------------------ */
   const handleAddTag = async () => {
     if (!newTagName.trim()) return setShowAddTag(false);
     try {
