@@ -15,31 +15,28 @@ export function BottomNavigation() {
     { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={24} />, color: '#8B5CF6' },
   ];
 
+  const activeIndex = tabs.findIndex((t) => t.id === activeTab);
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t-2 border-slate-200 shadow-lg">
       <div className="max-w-[1920px] mx-auto px-2 relative">
         <div className="flex items-center justify-around h-16 relative">
-          {/* Shared animated pill overlay */}
-          {tabs.map(
-            (tab) =>
-              activeTab === tab.id && (
-                <motion.div
-                  key={tab.id}
-                  layoutId="activeTabPill"
-                  className="absolute top-[40%] -translate-y-1/2 rounded-2xl pointer-events-none"
-                  style={{
-                    backgroundColor: `${tab.color}33`,
-                    width: `calc(100% / ${tabs.length} - 0.5rem)`,
-                    height: '70%',
-                    left: `calc(${tabs.findIndex((t) => t.id === tab.id)} * (100% / ${tabs.length}) + 0.25rem)`,
-                    boxShadow: `0 0 12px 4px ${tab.color}40`,
-                  }}
-                  transition={{
-                    layout: { type: 'spring', stiffness: 200, damping: 28 },
-                  }}
-                />
-              )
-          )}
+          {/* Shared, fixed-position pill above all buttons */}
+          <motion.div
+            layoutId="activeTabPill"
+            className="absolute rounded-2xl pointer-events-none"
+            style={{
+              backgroundColor: `${tabs[activeIndex]?.color}33`,
+              boxShadow: `0 0 12px 4px ${tabs[activeIndex]?.color}40`,
+              width: `calc(100% / ${tabs.length} - 0.5rem)`,
+              height: '70%',
+              top: '16%', // ← keeps it at the same height no matter which tab
+              left: `calc(${activeIndex} * (100% / ${tabs.length}) + 0.25rem)`,
+            }}
+            transition={{
+              layout: { type: 'spring', stiffness: 250, damping: 28 },
+            }}
+          />
 
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
