@@ -7,7 +7,6 @@ import type {
   Tag,
   Idea,
   Lane,
-  Person,
   InboundEmail,
 } from '../lib/types';
 
@@ -22,8 +21,6 @@ export function useData() {
     setIdeas,
     setPeople,
     setEmails,
-    updateTask,
-    addTask,
     removeTask,
   } = useAppStore();
 
@@ -49,14 +46,7 @@ export function useData() {
       return;
     }
 
-    const formattedTasks: Task[] = (tasks || []).map((task: any) => ({
-      ...task,
-      tags: task.tags?.map((t: any) => t.tag) || [],
-      divisions: task.divisions?.map((d: any) => d.division) || [],
-      subtasks: task.subtasks || [],
-      notes: task.notes || [],
-    }));
-
+    const formattedTasks: Task[] = (tasks || []).map((task: any) => formatTask(task));
     setTasks(formattedTasks);
   }, [setTasks]);
 
@@ -172,42 +162,54 @@ export function useData() {
 
     loadAllData();
 
-    const channels = [
-      supabase
-        .channel('tasks')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, fetchTasks)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'subtasks' }, fetchTasks)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'task_tags' }, fetchTasks)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'task_divisions' }, fetchTasks)
-        .subscribe(),
+    // tasks + related tables
+    const tasksChannel = supabase
+      .channel('tasks-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, fetchTasks)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, fetchTasks)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
+        // remove locally to avoid flicker
+        removeTask(payload.old.id);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'subtasks' }, fetchTasks)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, fetchTasks)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_tags' }, fetchTasks)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_divisions' }, fetchTasks)
+      .subscribe();
 
-      supabase
-        .channel('tags')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tags' }, fetchTags)
-        .subscribe(),
+    const tagsChannel = supabase
+      .channel('tags-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tags' }, fetchTags)
+      .subscribe();
 
-      supabase
-        .channel('divisions')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'divisions' }, fetchDivisions)
-        .subscribe(),
+    const divisionsChannel = supabase
+      .channel('divisions-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'divisions' }, fetchDivisions)
+      .subscribe();
 
-      supabase
-        .channel('ideas')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'ideas' }, fetchIdeas)
-        .subscribe(),
+    const ideasChannel = supabase
+      .channel('ideas-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ideas' }, fetchIdeas)
+      .subscribe();
 
-      supabase
-        .channel('people')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'people' }, fetchPeople)
-        .subscribe(),
+    const peopleChannel = supabase
+      .channel('people-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'people' }, fetchPeople)
+      .subscribe();
 
-      supabase
-        .channel('emails')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'inbound_emails' }, fetchEmails)
-        .subscribe(),
-    ];
+    const emailsChannel = supabase
+      .channel('emails-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inbound_emails' }, fetchEmails)
+      .subscribe();
 
-    return () => channels.forEach((c) => c.unsubscribe());
+    return () => {
+      tasksChannel.unsubscribe();
+      tagsChannel.unsubscribe();
+      divisionsChannel.unsubscribe();
+      ideasChannel.unsubscribe();
+      peopleChannel.unsubscribe();
+      emailsChannel.unsubscribe();
+    };
   }, [fetchTasks, fetchDivisions, fetchTags, fetchIdeas, fetchPeople, fetchEmails, removeTask]);
 
   return {
@@ -255,6 +257,15 @@ export async function createTask(data: {
     .single();
 
   if (error) throw error;
+
+  // log
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: task.id,
+    action: 'created',
+    changes: { task },
+  });
+
   return formatTask(task);
 }
 
@@ -263,33 +274,138 @@ export async function updateTaskData(id: string, updates: Partial<Task>) {
     .from('tasks')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id);
+
   if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: id,
+    action: 'updated',
+    changes: updates,
+  });
 }
 
 export async function deleteTask(id: string) {
   const { error } = await supabase.from('tasks').delete().eq('id', id);
   if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: id,
+    action: 'deleted',
+    changes: {},
+  });
 }
 
 export async function moveTask(id: string, lane: Lane, order_rank: number) {
   const updates: any = { lane, order_rank, updated_at: new Date().toISOString() };
+
   if (lane === 'green') {
     updates.completed_at = new Date().toISOString();
     updates.progress_state = 'completed';
   }
+
   const { error } = await supabase.from('tasks').update(updates).eq('id', id);
   if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: id,
+    action: 'moved',
+    changes: { lane, order_rank },
+  });
 }
 
 /* -------------------------------------------------------------------------- */
-/*                             SUBTASK & NOTES CRUD                           */
+/*                           TAG/TASK LINKING HELPERS                         */
 /* -------------------------------------------------------------------------- */
+
+export async function addTagToTask(taskId: string, tagId: string) {
+  const { error } = await supabase.from('task_tags').insert({ task_id: taskId, tag_id: tagId });
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: taskId,
+    action: 'tagged',
+    changes: { tag_id: tagId },
+  });
+}
+
+export async function removeTagFromTask(taskId: string, tagId: string) {
+  const { error } = await supabase
+    .from('task_tags')
+    .delete()
+    .eq('task_id', taskId)
+    .eq('tag_id', tagId);
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
+    entity_id: taskId,
+    action: 'untagged',
+    changes: { tag_id: tagId },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/*                               SUBTASKS CRUD                                */
+/* -------------------------------------------------------------------------- */
+
+export async function createSubtask(taskId: string, title: string, order_rank?: number) {
+  const { data: subtask, error } = await supabase
+    .from('subtasks')
+    .insert({
+      task_id: taskId,
+      title,
+      order_rank: order_rank || Date.now(),
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return subtask;
+}
 
 export async function updateSubtask(id: string, updates: any) {
   const { error } = await supabase
     .from('subtasks')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteSubtask(id: string) {
+  const { error } = await supabase.from('subtasks').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                 NOTES CRUD                                 */
+/* -------------------------------------------------------------------------- */
+
+export async function createNote(taskId: string, content: string) {
+  const { data: note, error } = await supabase
+    .from('notes')
+    .insert({ task_id: taskId, content })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return note;
+}
+
+export async function updateNote(id: string, content: string) {
+  const { error } = await supabase
+    .from('notes')
+    .update({ content, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+export async function deleteNote(id: string) {
+  const { error } = await supabase.from('notes').delete().eq('id', id);
   if (error) throw error;
 }
 
@@ -353,6 +469,7 @@ export async function createPerson(name: string, email?: string) {
     .insert({ name, email: email || null })
     .select()
     .single();
+
   if (error) throw error;
   return person;
 }
@@ -362,12 +479,75 @@ export async function updatePersonData(id: string, updates: { name?: string; ema
     .from('people')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id);
+
   if (error) throw error;
 }
 
 export async function deletePerson(id: string) {
   const { error } = await supabase.from('people').delete().eq('id', id);
   if (error) throw error;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                 IDEA CRUD                                  */
+/* -------------------------------------------------------------------------- */
+
+export async function createIdea(data: { title: string; description?: string }) {
+  const { data: idea, error } = await supabase
+    .from('ideas')
+    .insert({
+      title: data.title,
+      description: data.description || '',
+    })
+    .select(
+      `
+      *,
+      tags:idea_tags(tag:tags(*))
+    `
+    )
+    .single();
+
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'idea',
+    entity_id: idea.id,
+    action: 'created',
+    changes: { idea },
+  });
+
+  return {
+    ...idea,
+    tags: idea.tags?.map((t: any) => t.tag) || [],
+  };
+}
+
+export async function updateIdeaData(id: string, updates: Partial<Idea>) {
+  const { error } = await supabase
+    .from('ideas')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'idea',
+    entity_id: id,
+    action: 'updated',
+    changes: updates,
+  });
+}
+
+export async function deleteIdea(id: string) {
+  const { error } = await supabase.from('ideas').delete().eq('id', id);
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'idea',
+    entity_id: id,
+    action: 'deleted',
+    changes: {},
+  });
 }
 
 /* -------------------------------------------------------------------------- */
