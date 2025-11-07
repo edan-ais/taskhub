@@ -2,7 +2,21 @@ import { useMemo } from 'react';
 import { BarChart3, TrendingUp, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { useAppStore } from '../../lib/store';
 import { isPast, parseISO, format, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  Legend,
+} from 'recharts';
 
 const COLORS = ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899'];
 
@@ -67,7 +81,9 @@ export function AnalyticsTab() {
     const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
     const weeklyActivity = weekDays.map((day) => {
-      const dayTasks = tasks.filter((t) => t.due_date && parseISO(t.due_date).toDateString() === day.toDateString());
+      const dayTasks = tasks.filter(
+        (t) => t.due_date && parseISO(t.due_date).toDateString() === day.toDateString()
+      );
       return {
         day: format(day, 'EEE'),
         tasks: dayTasks.length,
@@ -103,7 +119,8 @@ export function AnalyticsTab() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="mt-[100px] md:mt-0 px-4 md:px-6 lg:px-8 space-y-6">
+      {/* Summary Cards */}
       <div className="bg-white rounded-xl p-6 border-2 border-slate-300">
         <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
           <BarChart3 size={28} />
@@ -145,6 +162,7 @@ export function AnalyticsTab() {
         </div>
       </div>
 
+      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl p-6 border-2 border-slate-300">
           <h3 className="text-lg font-bold text-slate-800 mb-4">Tasks by Lane</h3>
@@ -183,6 +201,7 @@ export function AnalyticsTab() {
         </div>
       </div>
 
+      {/* Weekly Activity */}
       <div className="bg-white rounded-xl p-6 border-2 border-slate-300">
         <h3 className="text-lg font-bold text-slate-800 mb-4">Weekly Activity</h3>
         <ResponsiveContainer width="100%" height={300}>
@@ -198,6 +217,7 @@ export function AnalyticsTab() {
         </ResponsiveContainer>
       </div>
 
+      {/* People, Tags, Divisions */}
       {analytics.peopleStats.length > 0 && (
         <div className="bg-white rounded-xl p-6 border-2 border-slate-300">
           <h3 className="text-lg font-bold text-slate-800 mb-4">Tasks by Team Member</h3>
