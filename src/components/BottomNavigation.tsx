@@ -27,19 +27,21 @@ export function BottomNavigation() {
                 onClick={() => setActiveTab(tab.id)}
                 className="relative flex flex-col items-center justify-center flex-1 h-full transition-colors"
               >
-                {isActive && (
-                  <motion.div
-                    layoutId="activeTabIndicator"
-                    className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-1 rounded-b"
-                    style={{ backgroundColor: tab.color }}
-                    transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-                  />
-                )}
-                <div
-                  className="transition-colors"
-                  style={{ color: isActive ? tab.color : '#64748B' }}
-                >
-                  {tab.icon}
+                <div className="relative flex flex-col items-center justify-center">
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeTabIndicator"
+                      className="absolute -top-1 left-1/2 -translate-x-1/2 w-8 h-1.5 rounded-full"
+                      style={{ backgroundColor: tab.color }}
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <div
+                    className="transition-colors"
+                    style={{ color: isActive ? tab.color : '#64748B' }}
+                  >
+                    {tab.icon}
+                  </div>
                 </div>
                 <span
                   className="text-xs mt-1 font-medium transition-colors"
