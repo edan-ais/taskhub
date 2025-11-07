@@ -143,9 +143,9 @@ export function PeopleTab() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-xl p-6 border-2 border-slate-300">
-        <div className="flex items-center justify-between mb-4">
+    <div className="space-y-8">
+      <div className="bg-white rounded-xl p-6 border-2 border-slate-300 shadow-sm">
+        <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <Users size={28} />
             Team Management
@@ -160,8 +160,8 @@ export function PeopleTab() {
         </div>
 
         {showAddPerson && (
-          <div className="mb-4 p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
-            <div className="flex gap-2">
+          <div className="mb-6 p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+            <div className="flex gap-3">
               <input
                 type="text"
                 value={newPersonName}
@@ -193,10 +193,27 @@ export function PeopleTab() {
         <div>
           <h3 className="text-sm font-semibold text-slate-600 mb-3">Team Members</h3>
           <div className="flex flex-wrap gap-3">
+            {/* Unassigned first */}
+            {unassignedTasks.length > 0 && (
+              <button
+                onClick={() => setSelectedPerson(null)}
+                className={`min-w-[200px] px-6 py-3.5 rounded-xl font-medium border-2 flex items-center justify-between transition-all ${
+                  selectedPerson === null
+                    ? 'bg-slate-600 text-white border-slate-700 shadow-md'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <span>Unassigned</span>
+                <span className="text-xs bg-slate-100 text-slate-700 rounded-full px-2 py-0.5">
+                  {unassignedTasks.length}
+                </span>
+              </button>
+            )}
+
             {peopleWithCounts.map((person) => (
               <div
                 key={person.id}
-                className={`flex items-center justify-between px-5 py-3 rounded-xl border-2 cursor-pointer transition-all ${
+                className={`min-w-[200px] px-6 py-3.5 rounded-xl border-2 flex items-center justify-between transition-all ${
                   selectedPerson === person.name
                     ? 'bg-blue-600 text-white border-blue-700 shadow-md'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
@@ -204,13 +221,13 @@ export function PeopleTab() {
                 onClick={() => setSelectedPerson(person.name)}
               >
                 {editingPerson === person.name ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full">
                     <input
                       type="text"
                       value={editPersonName}
                       onChange={(e) => setEditPersonName(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                      className="px-2 py-1 border-2 border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 px-2 py-1 border-2 border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       autoFocus
                     />
                     <button onClick={handleSaveEdit} className="p-1 hover:bg-green-100 rounded text-green-600">
@@ -256,22 +273,6 @@ export function PeopleTab() {
                 )}
               </div>
             ))}
-
-            {unassignedTasks.length > 0 && (
-              <button
-                onClick={() => setSelectedPerson(null)}
-                className={`px-5 py-3 rounded-xl font-medium border-2 transition-all flex items-center gap-2 ${
-                  selectedPerson === null
-                    ? 'bg-slate-600 text-white border-slate-700 shadow-md'
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                }`}
-              >
-                Unassigned
-                <span className="text-xs bg-slate-100 text-slate-700 rounded-full px-2 py-0.5">
-                  {unassignedTasks.length}
-                </span>
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -291,13 +292,10 @@ export function PeopleTab() {
         };
 
         return (
-          <div
-            key={lane}
-            className={`rounded-xl border-2 ${laneColors[lane]} p-4`}
-          >
+          <div key={lane} className={`rounded-xl border-2 ${laneColors[lane]} p-6`}>
             <button
               onClick={() => toggleLane(lane)}
-              className="flex items-center justify-between w-full text-left font-semibold text-slate-800 mb-3"
+              className="flex items-center justify-between w-full text-left font-semibold text-slate-800 mb-4"
             >
               <div className="flex items-center gap-2 text-lg">
                 {collapsedLanes[lane] ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
@@ -313,17 +311,23 @@ export function PeopleTab() {
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.3 }}
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-hidden"
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-hidden"
                 >
                   {laneTasks.map((task) => (
                     <motion.div
                       key={task.id}
-                      className="min-h-[220px] flex flex-col justify-between"
+                      className="h-[260px] flex flex-col justify-between bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden"
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.25 }}
                     >
-                      <TaskCard task={task} />
+                      <div className="p-4 flex flex-col justify-between h-full">
+                        <h4 className="font-semibold text-slate-800 mb-2 line-clamp-1">{task.title}</h4>
+                        <p className="text-sm text-slate-600 line-clamp-3">{task.description}</p>
+                        {task.subtasks && task.subtasks.length > 3 && (
+                          <p className="text-xs text-slate-400 mt-1">+{task.subtasks.length - 3} more…</p>
+                        )}
+                      </div>
                     </motion.div>
                   ))}
                   {laneTasks.length === 0 && (
