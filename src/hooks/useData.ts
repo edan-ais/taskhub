@@ -344,6 +344,33 @@ export async function deleteDivision(id: string) {
 }
 
 /* -------------------------------------------------------------------------- */
+/*                                 PEOPLE CRUD                                */
+/* -------------------------------------------------------------------------- */
+
+export async function createPerson(name: string, email?: string) {
+  const { data: person, error } = await supabase
+    .from('people')
+    .insert({ name, email: email || null })
+    .select()
+    .single();
+  if (error) throw error;
+  return person;
+}
+
+export async function updatePersonData(id: string, updates: { name?: string; email?: string }) {
+  const { error } = await supabase
+    .from('people')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deletePerson(id: string) {
+  const { error } = await supabase.from('people').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/* -------------------------------------------------------------------------- */
 /*                                   HELPERS                                  */
 /* -------------------------------------------------------------------------- */
 
