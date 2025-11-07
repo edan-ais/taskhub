@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
-import { Users, Plus, Edit2, Trash2, X, Check } from 'lucide-react';
+import { Users, Plus, Edit2, Trash2, X, Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../../lib/store';
 import { TaskCard } from '../TaskCard';
-import { motion } from 'framer-motion';
 import { createPerson, updatePersonData, deletePerson, updateTaskData } from '../../hooks/useData';
 import type { Person } from '../../lib/types';
 
@@ -24,6 +24,11 @@ export function PeopleTab() {
   const [newPersonName, setNewPersonName] = useState('');
   const [editingPerson, setEditingPerson] = useState<string | null>(null);
   const [editPersonName, setEditPersonName] = useState('');
+  const [collapsedLanes, setCollapsedLanes] = useState<Record<string, boolean>>({
+    red: false,
+    yellow: false,
+    green: false,
+  });
 
   const filteredTasks = tasks.filter(
     (task) =>
@@ -47,6 +52,18 @@ export function PeopleTab() {
     selectedPerson === null
       ? unassignedTasks
       : filteredTasks.filter((t) => t.assignee === selectedPerson);
+
+  const groupedTasks = useMemo(() => {
+    const lanes = { red: [], yellow: [], green: [] } as Record<string, typeof displayedTasks>;
+    displayedTasks.forEach((task) => {
+      if (lanes[task.lane]) lanes[task.lane].push(task);
+    });
+    return lanes;
+  }, [displayedTasks]);
+
+  const toggleLane = (lane: string) => {
+    setCollapsedLanes((prev) => ({ ...prev, [lane]: !prev[lane] }));
+  };
 
   const handleAddPerson = async () => {
     if (!newPersonName.trim()) return;
@@ -175,13 +192,13 @@ export function PeopleTab() {
 
         <div>
           <h3 className="text-sm font-semibold text-slate-600 mb-3">Team Members</h3>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {peopleWithCounts.map((person) => (
               <div
                 key={person.id}
-                className={`flex items-center justify-between px-4 py-2 rounded-lg border-2 cursor-pointer transition-all ${
+                className={`flex items-center justify-between px-5 py-3 rounded-xl border-2 cursor-pointer transition-all ${
                   selectedPerson === person.name
-                    ? 'bg-blue-600 text-white border-blue-700'
+                    ? 'bg-blue-600 text-white border-blue-700 shadow-md'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                 }`}
                 onClick={() => setSelectedPerson(person.name)}
@@ -196,24 +213,26 @@ export function PeopleTab() {
                       className="px-2 py-1 border-2 border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       autoFocus
                     />
-                    <button
-                      onClick={handleSaveEdit}
-                      className="p-1 hover:bg-green-100 rounded text-green-600"
-                    >
+                    <button onClick={handleSaveEdit} className="p-1 hover:bg-green-100 rounded text-green-600">
                       <Check size={16} />
                     </button>
-                    <button
-                      onClick={() => setEditingPerson(null)}
-                      className="p-1 hover:bg-slate-200 rounded text-slate-600"
-                    >
+                    <button onClick={() => setEditingPerson(null)} className="p-1 hover:bg-slate-200 rounded text-slate-600">
                       <X size={16} />
                     </button>
                   </div>
                 ) : (
                   <>
-                    <span className="font-medium">{person.name}</span>
+                    <span className="font-medium truncate max-w-[120px]">{person.name}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs opacity-80">{person.taskCount}</span>
+                      <span
+                        className={`text-xs font-semibold rounded-full px-2 py-0.5 ${
+                          selectedPerson === person.name
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {person.taskCount}
+                      </span>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -241,36 +260,83 @@ export function PeopleTab() {
             {unassignedTasks.length > 0 && (
               <button
                 onClick={() => setSelectedPerson(null)}
-                className={`px-4 py-2 rounded-lg font-medium border-2 transition-all ${
+                className={`px-5 py-3 rounded-xl font-medium border-2 transition-all flex items-center gap-2 ${
                   selectedPerson === null
-                    ? 'bg-slate-600 text-white border-slate-700'
+                    ? 'bg-slate-600 text-white border-slate-700 shadow-md'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                 }`}
               >
-                Unassigned ({unassignedTasks.length})
+                Unassigned
+                <span className="text-xs bg-slate-100 text-slate-700 rounded-full px-2 py-0.5">
+                  {unassignedTasks.length}
+                </span>
               </button>
             )}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {displayedTasks.map((task) => (
-          <motion.div
-            key={task.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+      {/* --- TASKS BY LANE --- */}
+      {['red', 'yellow', 'green'].map((lane) => {
+        const laneTasks = groupedTasks[lane];
+        const laneTitles: Record<string, string> = {
+          red: 'Pending',
+          yellow: 'In Progress',
+          green: 'Completed',
+        };
+        const laneColors: Record<string, string> = {
+          red: 'border-red-400 bg-red-50',
+          yellow: 'border-yellow-400 bg-yellow-50',
+          green: 'border-green-400 bg-green-50',
+        };
+
+        return (
+          <div
+            key={lane}
+            className={`rounded-xl border-2 ${laneColors[lane]} p-4`}
           >
-            <TaskCard task={task} />
-          </motion.div>
-        ))}
-        {displayedTasks.length === 0 && (
-          <div className="col-span-full text-center py-12 text-slate-400">
-            No tasks found for {selectedPerson || 'unassigned'}
+            <button
+              onClick={() => toggleLane(lane)}
+              className="flex items-center justify-between w-full text-left font-semibold text-slate-800 mb-3"
+            >
+              <div className="flex items-center gap-2 text-lg">
+                {collapsedLanes[lane] ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                {laneTitles[lane]} ({laneTasks.length})
+              </div>
+            </button>
+
+            <AnimatePresence>
+              {!collapsedLanes[lane] && (
+                <motion.div
+                  key={lane}
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-hidden"
+                >
+                  {laneTasks.map((task) => (
+                    <motion.div
+                      key={task.id}
+                      className="min-h-[220px] flex flex-col justify-between"
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25 }}
+                    >
+                      <TaskCard task={task} />
+                    </motion.div>
+                  ))}
+                  {laneTasks.length === 0 && (
+                    <div className="col-span-full text-center py-6 text-slate-400">
+                      No {laneTitles[lane].toLowerCase()} tasks for {selectedPerson || 'unassigned'}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-        )}
-      </div>
+        );
+      })}
     </div>
   );
 }
