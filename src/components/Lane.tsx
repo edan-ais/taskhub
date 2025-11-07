@@ -45,16 +45,16 @@ export function Lane({
 
   return (
     <motion.div
-      ref={setNodeRef}
-      initial={false}
-      animate={{
-        maxHeight: isCollapsed ? 84 : 1000, // collapses whole lane, not just tasks
-      }}
-      transition={{ duration: 0.3, ease: "easeInOut" }}
-      className={`flex flex-col min-h-[84px] border-2 border-slate-300 rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 ${
-        isOver ? "border-blue-500 scale-[1.01]" : ""
-      }`}
-    >
+  ref={setNodeRef}
+  initial={false}
+  animate={{
+    maxHeight: isCollapsed ? 84 : "none", // allow unlimited height when open
+  }}
+  transition={{ duration: 0.3, ease: "easeInOut" }}
+  className={`flex flex-col min-h-[84px] border-2 border-slate-300 rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 ${
+    isOver ? "border-blue-500 scale-[1.01]" : ""
+  }`}
+>
       {/* HEADER */}
       <div className="flex-shrink-0 bg-white border-b border-slate-300 p-4">
         <div className="flex items-center justify-between">
