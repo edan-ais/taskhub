@@ -8,34 +8,53 @@ import AdminDashboard from './components/AdminDashboard';
 import { useAppStore } from './lib/store';
 import { useData } from './hooks/useData';
 import { LoadingSpinner } from './components/LoadingSpinner';
-import {
-  HomeTab,
-  PeopleTab,
-  TagsTab,
-  CalendarTab,
-  IdeasTab,
-  AnalyticsTab,
-} from './components/tabs';
+
+// Import each tab individually (no index.ts dependency)
+import { HomeTab } from './components/tabs/HomeTab';
+import { PeopleTab } from './components/tabs/PeopleTab';
+import { TagsTab } from './components/tabs/TagsTab';
+import { CalendarTab } from './components/tabs/CalendarTab';
+import { IdeasTab } from './components/tabs/IdeasTab';
+import { AnalyticsTab } from './components/tabs/AnalyticsTab';
 
 export default function App() {
   const { user, loading: authLoading } = useAuth();
   const { isLoading } = useData();
   const { activeTab } = useAppStore();
+
   const [approved, setApproved] = useState<boolean | null>(null);
 
+  /* -------------------------------------------------------------------------- */
+  /*                     FETCH PROFILE APPROVAL STATUS (once)                   */
+  /* -------------------------------------------------------------------------- */
   useEffect(() => {
     const fetchApproval = async () => {
       if (!user) return;
-      const { data } = await supabase
-        .from('profiles')
-        .select('approved')
-        .eq('user_id', user.id)
-        .single();
-      setApproved(data?.approved ?? false);
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('approved')
+          .eq('user_id', user.id)
+          .single();
+
+        if (error) {
+          console.error('Error loading profile:', error);
+          setApproved(false);
+        } else {
+          setApproved(data?.approved ?? false);
+        }
+      } catch (err) {
+        console.error('Unexpected error loading approval:', err);
+        setApproved(false);
+      }
     };
+
     fetchApproval();
   }, [user]);
 
+  /* -------------------------------------------------------------------------- */
+  /*                                 LOADING STATE                              */
+  /* -------------------------------------------------------------------------- */
   if (authLoading || isLoading || approved === null) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
@@ -47,8 +66,14 @@ export default function App() {
     );
   }
 
+  /* -------------------------------------------------------------------------- */
+  /*                              UNAUTHENTICATED                               */
+  /* -------------------------------------------------------------------------- */
   if (!user) return <Auth />;
 
+  /* -------------------------------------------------------------------------- */
+  /*                             AWAITING APPROVAL                              */
+  /* -------------------------------------------------------------------------- */
   if (approved === false) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
@@ -57,26 +82,34 @@ export default function App() {
           Awaiting Account Approval
         </h2>
         <p className="text-slate-600 text-sm text-center max-w-sm">
-          Your profile has been created and is awaiting admin verification. You’ll gain access
-          once your organization tag has been assigned.
+          Your profile has been created and is awaiting admin verification. You’ll gain
+          access once your organization tag has been assigned.
         </p>
       </div>
     );
   }
 
-  // Authenticated + approved
+  /* -------------------------------------------------------------------------- */
+  /*                        AUTHENTICATED + APPROVED USER                       */
+  /* -------------------------------------------------------------------------- */
   return (
     <div className="min-h-screen bg-slate-50">
       <Navigation />
+
       <main className="pt-20 pb-24 px-4 md:px-6 lg:px-8 max-w-[1920px] mx-auto">
+        {/* Tab rendering */}
         {activeTab === 'home' && <HomeTab />}
         {activeTab === 'people' && <PeopleTab />}
         {activeTab === 'tags' && <TagsTab />}
         {activeTab === 'calendar' && <CalendarTab />}
         {activeTab === 'ideas' && <IdeasTab />}
         {activeTab === 'analytics' && <AnalyticsTab />}
-        {activeTab === 'admin' && user?.email === 'edanharrofficial@gmail.com' && <AdminDashboard />}
+
+        {/* Admin tab — visible only to Edan */}
+        {activeTab === 'admin' &&
+          user?.email === 'edanharrofficial@gmail.com' && <AdminDashboard />}
       </main>
+
       <BottomNavigation />
     </div>
   );
