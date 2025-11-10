@@ -9,7 +9,7 @@ import { useAppStore } from './lib/store';
 import { useData } from './hooks/useData';
 import { LoadingSpinner } from './components/LoadingSpinner';
 
-// Import each tab individually (no index.ts dependency)
+// Tabs
 import { HomeTab } from './components/tabs/HomeTab';
 import { PeopleTab } from './components/tabs/PeopleTab';
 import { TagsTab } from './components/tabs/TagsTab';
@@ -21,41 +21,52 @@ export default function App() {
   const { user, loading: authLoading } = useAuth();
   const { isLoading } = useData();
   const { activeTab } = useAppStore();
-
   const [approved, setApproved] = useState<boolean | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   /* -------------------------------------------------------------------------- */
-  /*                     FETCH PROFILE APPROVAL STATUS (once)                   */
+  /*                      FETCH OR CREATE PROFILE ON LOGIN                      */
   /* -------------------------------------------------------------------------- */
   useEffect(() => {
-    const fetchApproval = async () => {
-      if (!user) return;
+    const ensureProfile = async () => {
+      if (!user) {
+        setApproved(null);
+        setProfileLoading(false);
+        return;
+      }
+
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('approved')
+          .select('*')
           .eq('user_id', user.id)
           .single();
 
-        if (error) {
-          console.error('Error loading profile:', error);
+        // ✅ Auto-create missing profile so app never hangs
+        if (error && error.code === 'PGRST116') {
+          await supabase.from('profiles').insert({
+            user_id: user.id,
+            approved: false,
+          });
           setApproved(false);
         } else {
           setApproved(data?.approved ?? false);
         }
       } catch (err) {
-        console.error('Unexpected error loading approval:', err);
+        console.error('Error loading/creating profile:', err);
         setApproved(false);
+      } finally {
+        setProfileLoading(false);
       }
     };
 
-    fetchApproval();
+    ensureProfile();
   }, [user]);
 
   /* -------------------------------------------------------------------------- */
-  /*                                 LOADING STATE                              */
+  /*                               LOADING STATES                               */
   /* -------------------------------------------------------------------------- */
-  if (authLoading || isLoading || approved === null) {
+  if (authLoading || isLoading || profileLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
         <LoadingSpinner size={48} className="text-blue-600 mb-3" />
@@ -72,7 +83,7 @@ export default function App() {
   if (!user) return <Auth />;
 
   /* -------------------------------------------------------------------------- */
-  /*                             AWAITING APPROVAL                              */
+  /*                           AWAITING ADMIN APPROVAL                          */
   /* -------------------------------------------------------------------------- */
   if (approved === false) {
     return (
@@ -82,34 +93,29 @@ export default function App() {
           Awaiting Account Approval
         </h2>
         <p className="text-slate-600 text-sm text-center max-w-sm">
-          Your profile has been created and is awaiting admin verification. You’ll gain
-          access once your organization tag has been assigned.
+          Your profile has been created and is awaiting admin verification. You’ll gain access
+          once your organization tag has been assigned.
         </p>
       </div>
     );
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                        AUTHENTICATED + APPROVED USER                       */
+  /*                            AUTHENTICATED & APPROVED                        */
   /* -------------------------------------------------------------------------- */
   return (
     <div className="min-h-screen bg-slate-50">
       <Navigation />
-
       <main className="pt-20 pb-24 px-4 md:px-6 lg:px-8 max-w-[1920px] mx-auto">
-        {/* Tab rendering */}
         {activeTab === 'home' && <HomeTab />}
         {activeTab === 'people' && <PeopleTab />}
         {activeTab === 'tags' && <TagsTab />}
         {activeTab === 'calendar' && <CalendarTab />}
         {activeTab === 'ideas' && <IdeasTab />}
         {activeTab === 'analytics' && <AnalyticsTab />}
-
-        {/* Admin tab — visible only to Edan */}
         {activeTab === 'admin' &&
           user?.email === 'edanharrofficial@gmail.com' && <AdminDashboard />}
       </main>
-
       <BottomNavigation />
     </div>
   );
