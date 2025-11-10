@@ -10,44 +10,57 @@ export default function Profile() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [allProfiles, setAllProfiles] = useState<any[]>([]);
 
-  // Load current user's profile and check if admin
+  /* ----------------------------- LOAD PROFILE ----------------------------- */
   useEffect(() => {
     const loadProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
-      // Fetch own profile
-      const { data: profileData, error } = await supabase
+      // Try fetching by user_id first, fallback to email
+      let { data: profileData, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        console.error('Error fetching profile:', error);
-        return;
+      if (!profileData && user.email) {
+        const { data: fallback } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', user.email)
+          .maybeSingle();
+        profileData = fallback;
       }
+
+      if (error) console.warn('Error fetching profile:', error.message);
 
       setProfile(profileData);
       setIsAdmin(profileData?.organization_tag === 'WW529400');
       setLoading(false);
     };
+
     loadProfile();
   }, []);
 
-  // If admin, fetch all profiles
+  /* --------------------------- LOAD ALL PROFILES --------------------------- */
   useEffect(() => {
     if (!isAdmin) return;
     const loadAllProfiles = async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, user_id, email, organization_tag, approved, permission_level');
+        .select('id, user_id, email, organization_tag, approved, permission_level')
+        .order('email', { ascending: true });
+
       if (error) console.error('Error loading all profiles:', error);
       else setAllProfiles(data || []);
     };
     loadAllProfiles();
   }, [isAdmin]);
 
+  /* ----------------------------- SAVE OWN PROFILE ----------------------------- */
   const saveOwnProfile = async () => {
     if (!profile) return;
     const { error } = await supabase
@@ -57,10 +70,12 @@ export default function Profile() {
         updated_at: new Date().toISOString(),
       })
       .eq('id', profile.id);
-    setMessage(error ? error.message : 'Saved!');
+
+    setMessage(error ? error.message : '✅ Profile saved successfully.');
     setEditing(false);
   };
 
+  /* -------------------------- UPDATE USER PERMISSIONS -------------------------- */
   const updateUserPermissions = async (userId: string, updates: any) => {
     const { error } = await supabase
       .from('profiles')
@@ -69,9 +84,21 @@ export default function Profile() {
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId);
-    setMessage(error ? error.message : 'Updated!');
+
+    if (error) {
+      setMessage('❌ ' + error.message);
+    } else {
+      setMessage('✅ User updated!');
+      // Refresh list to reflect changes
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, user_id, email, organization_tag, approved, permission_level')
+        .order('email', { ascending: true });
+      setAllProfiles(data || []);
+    }
   };
 
+  /* ------------------------------ LOADING STATE ------------------------------ */
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-slate-600">
@@ -89,6 +116,7 @@ export default function Profile() {
     );
   }
 
+  /* ------------------------------ MAIN PROFILE ------------------------------ */
   return (
     <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow">
       <div className="flex items-center gap-2 mb-4">
@@ -112,16 +140,22 @@ export default function Profile() {
               }
             />
           ) : (
-            <span>{profile.organization_tag || '—'}</span>
+            <span className="font-semibold text-blue-600">
+              {profile.organization_tag || '—'}
+            </span>
           )}
         </p>
         <p>
           <span className="font-medium text-slate-700">Permission Level:</span>{' '}
-          {profile.permission_level || 'Member'}
+          <span className="capitalize">{profile.permission_level || 'member'}</span>
         </p>
         <p>
           <span className="font-medium text-slate-700">Approved:</span>{' '}
-          {profile.approved ? '✅ Approved' : '❌ Pending'}
+          {profile.approved ? (
+            <span className="text-green-600 font-medium">✅ Approved</span>
+          ) : (
+            <span className="text-red-500 font-medium">❌ Pending</span>
+          )}
         </p>
       </div>
 
@@ -153,7 +187,7 @@ export default function Profile() {
         </p>
       )}
 
-      {/* ADMIN PANEL */}
+      {/* ----------------------------- ADMIN PANEL ----------------------------- */}
       {isAdmin && (
         <div className="mt-10">
           <div className="flex items-center gap-2 mb-3">
@@ -162,6 +196,7 @@ export default function Profile() {
               Admin: Manage Users
             </h3>
           </div>
+
           {allProfiles.length === 0 ? (
             <p className="text-slate-500 text-sm">No users found.</p>
           ) : (
@@ -181,20 +216,17 @@ export default function Profile() {
                       {p.permission_level}
                     </p>
                   </div>
+
                   <div className="flex gap-2">
                     <input
                       placeholder="Org ID"
                       defaultValue={p.organization_tag || ''}
-                      onChange={(e) =>
-                        (p.organization_tag = e.target.value.trim())
-                      }
+                      onChange={(e) => (p.organization_tag = e.target.value.trim())}
                       className="border border-slate-300 rounded px-2 py-1 text-xs"
                     />
                     <select
                       defaultValue={p.permission_level || 'member'}
-                      onChange={(e) =>
-                        (p.permission_level = e.target.value)
-                      }
+                      onChange={(e) => (p.permission_level = e.target.value)}
                       className="border border-slate-300 rounded px-2 py-1 text-xs"
                     >
                       <option value="member">Member</option>
