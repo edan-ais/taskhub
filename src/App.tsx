@@ -41,14 +41,6 @@ export default function App() {
       <Navigation />
 
       <main className="pt-20 pb-24 px-4 md:px-6 lg:px-8 max-w-[1920px] mx-auto">
-        <div className="flex justify-end mb-2">
-          <button
-            onClick={signOut}
-            className="text-sm text-pink-600 hover:text-pink-700"
-          >
-            Log out
-          </button>
-        </div>
 
         {activeTab === 'home' && <HomeTab />}
         {activeTab === 'people' && <PeopleTab />}
