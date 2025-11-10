@@ -11,6 +11,38 @@ import type {
 } from '../lib/types';
 
 /* -------------------------------------------------------------------------- */
+/*                              SAFETY HELPERS                                */
+/* -------------------------------------------------------------------------- */
+
+function safeFormatTask(task: any): Task {
+  // defend against null / unexpected shapes
+  const rawTags = Array.isArray(task?.tags) ? task.tags : [];
+  const rawDivisions = Array.isArray(task?.divisions) ? task.divisions : [];
+  const subtasks = Array.isArray(task?.subtasks) ? task.subtasks : [];
+  const notes = Array.isArray(task?.notes) ? task.notes : [];
+
+  return {
+    ...task,
+    tags: rawTags
+      .map((t: any) => (t?.tag ? t.tag : t))
+      .filter(Boolean),
+    divisions: rawDivisions
+      .map((d: any) => (d?.division ? d.division : d))
+      .filter(Boolean),
+    subtasks,
+    notes,
+  };
+}
+
+function safeFormatIdea(idea: any): Idea {
+  const rawTags = Array.isArray(idea?.tags) ? idea.tags : [];
+  return {
+    ...idea,
+    tags: rawTags.map((t: any) => (t?.tag ? t.tag : t)).filter(Boolean),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
 /*                                  useData                                   */
 /* -------------------------------------------------------------------------- */
 export function useData() {
@@ -44,7 +76,7 @@ export function useData() {
       .from('profiles')
       .select('organization_tag')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle(); // <-- safer than single()
 
     if (error) {
       console.error('Error fetching profile:', error);
@@ -52,8 +84,9 @@ export function useData() {
       return null;
     }
 
-    setUserOrgTag(profile?.organization_tag || null);
-    return profile?.organization_tag || null;
+    const orgTag = profile?.organization_tag || null;
+    setUserOrgTag(orgTag);
+    return orgTag;
   }, []);
 
   /* --------------------------- TASK DEDUPLICATION -------------------------- */
@@ -101,9 +134,11 @@ export function useData() {
         return;
       }
 
-      // Admin orgs get all tasks; others see only their org's
+      // your old logic: this org is "admin"
       const isAdminOrg = orgTag === 'WW529400';
-      const query = supabase
+
+      // 1) try fancy query with joins
+      let query = supabase
         .from('tasks')
         .select(
           `
@@ -116,19 +151,46 @@ export function useData() {
         )
         .order('order_rank', { ascending: true });
 
-      if (!isAdminOrg) query.eq('organization_tag', orgTag);
+      if (!isAdminOrg) {
+        query = query.eq('organization_tag', orgTag);
+      }
 
-      const { data: tasks, error } = await query;
-      if (error) throw error;
+      let { data: tasks, error } = await query;
 
-      const formattedTasks: Task[] = (tasks || []).map((task: any) =>
-        formatTask(task)
+      // 2) if the deep select failed (missing join table etc.), fall back to plain
+      if (error) {
+        console.warn(
+          'Deep task select failed, falling back to plain select:',
+          error.message
+        );
+
+        let plainQuery = supabase.from('tasks').select('*').order('order_rank', {
+          ascending: true,
+        });
+
+        if (!isAdminOrg) {
+          plainQuery = plainQuery.eq('organization_tag', orgTag);
+        }
+
+        const plainRes = await plainQuery;
+        tasks = plainRes.data || [];
+        error = plainRes.error;
+      }
+
+      if (error) {
+        console.error('Error fetching tasks (even plain):', error);
+        setTasks([]);
+        return;
+      }
+
+      const formattedTasks: Task[] = (tasks || []).map((t: any) =>
+        safeFormatTask(t)
       );
-
       const uniqueTasks = deduplicateTasks(formattedTasks);
       setTasks(uniqueTasks);
     } catch (err) {
-      console.error('Error fetching tasks:', err);
+      console.error('Error fetching tasks (catch):', err);
+      setTasks([]);
     }
   }, [setTasks, userOrgTag, fetchUserOrgTag]);
 
@@ -165,9 +227,14 @@ export function useData() {
   /* ------------------------------ FETCH IDEAS ------------------------------ */
   const fetchIdeas = useCallback(async () => {
     const orgTag = userOrgTag || (await fetchUserOrgTag());
+    if (!orgTag) {
+      setIdeas([]);
+      return;
+    }
+
     const isAdminOrg = orgTag === 'WW529400';
 
-    const query = supabase
+    let query = supabase
       .from('ideas')
       .select(
         `
@@ -177,18 +244,33 @@ export function useData() {
       )
       .order('created_at', { ascending: false });
 
-    if (!isAdminOrg) query.eq('organization_tag', orgTag);
+    if (!isAdminOrg) query = query.eq('organization_tag', orgTag);
 
-    const { data: ideas, error } = await query;
+    let { data: ideas, error } = await query;
+
+    // fallback to plain if join fails
+    if (error) {
+      console.warn('Deep ideas select failed, using plain:', error.message);
+      let plainQuery = supabase
+        .from('ideas')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!isAdminOrg) plainQuery = plainQuery.eq('organization_tag', orgTag);
+
+      const plainRes = await plainQuery;
+      ideas = plainRes.data || [];
+      error = plainRes.error;
+    }
+
     if (error) {
       console.error('Error fetching ideas:', error);
+      setIdeas([]);
       return;
     }
 
-    const formattedIdeas: Idea[] = (ideas || []).map((idea: any) => ({
-      ...idea,
-      tags: idea.tags?.map((t: any) => t.tag) || [],
-    }));
+    const formattedIdeas: Idea[] = (ideas || []).map((idea: any) =>
+      safeFormatIdea(idea)
+    );
 
     setIdeas(formattedIdeas);
   }, [setIdeas, userOrgTag, fetchUserOrgTag]);
@@ -227,7 +309,9 @@ export function useData() {
 
     const formattedEmails: InboundEmail[] = (emails || []).map((email: any) => ({
       ...email,
-      attachments: email.attachments || [],
+      attachments: Array.isArray(email.attachments)
+        ? email.attachments
+        : [],
     }));
 
     setEmails(formattedEmails);
@@ -253,32 +337,56 @@ export function useData() {
 
     const tasksChannel = supabase
       .channel('tasks-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, fetchTasks)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tasks' },
+        fetchTasks
+      )
       .subscribe();
 
     const tagsChannel = supabase
       .channel('tags-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tags' }, fetchTags)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tags' },
+        fetchTags
+      )
       .subscribe();
 
     const divisionsChannel = supabase
       .channel('divisions-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'divisions' }, fetchDivisions)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'divisions' },
+        fetchDivisions
+      )
       .subscribe();
 
     const ideasChannel = supabase
       .channel('ideas-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ideas' }, fetchIdeas)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ideas' },
+        fetchIdeas
+      )
       .subscribe();
 
     const peopleChannel = supabase
       .channel('people-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'people' }, fetchPeople)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'people' },
+        fetchPeople
+      )
       .subscribe();
 
     const emailsChannel = supabase
       .channel('emails-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'inbound_emails' }, fetchEmails)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'inbound_emails' },
+        fetchEmails
+      )
       .subscribe();
 
     return () => {
@@ -323,19 +431,22 @@ export async function createTask(data: {
   due_date?: string | null;
   order_rank?: number;
 }) {
-  // Fetch user's org tag to attach to task
-  const { data: { user } } = await supabase.auth.getUser();
-  let orgTag = null;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let orgTag: string | null = null;
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('organization_tag')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
     orgTag = profile?.organization_tag || null;
   }
 
-  const { data: task, error } = await supabase
+  // try deep insert first
+  let { data: task, error } = await supabase
     .from('tasks')
     .insert({
       title: data.title,
@@ -355,18 +466,39 @@ export async function createTask(data: {
       notes(*)
     `
     )
-    .single();
+    .maybeSingle();
+
+  // if the deep select fails (join missing), just select plain
+  if (error) {
+    console.warn('createTask: deep select failed, using plain select', error);
+    const plain = await supabase
+      .from('tasks')
+      .insert({
+        title: data.title,
+        description: data.description || '',
+        lane: data.lane || 'red',
+        assignee: data.assignee || '',
+        due_date: data.due_date || null,
+        order_rank: data.order_rank || Date.now(),
+        organization_tag: orgTag,
+      })
+      .select('*')
+      .maybeSingle();
+
+    task = plain.data;
+    error = plain.error;
+  }
 
   if (error) throw error;
 
   await supabase.from('event_log').insert({
     entity_type: 'task',
-    entity_id: task.id,
+    entity_id: task?.id,
     action: 'created',
     changes: { task },
   });
 
-  return formatTask(task);
+  return safeFormatTask(task);
 }
 
 export async function updateTaskData(id: string, updates: Partial<Task>) {
@@ -505,7 +637,7 @@ export async function createSubtask(
       order_rank: order_rank || Date.now(),
     })
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
   return subtask;
@@ -533,7 +665,7 @@ export async function createNote(taskId: string, content: string) {
     .from('notes')
     .insert({ task_id: taskId, content })
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
   return note;
@@ -561,9 +693,9 @@ export async function createTag(name: string, color: string) {
     .from('tags')
     .insert({ name, color, order_index: Date.now() })
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw error;
-  return data;
+  return data as Tag;
 }
 
 export async function updateTagData(id: string, updates: Partial<Tag>) {
@@ -584,9 +716,9 @@ export async function createDivision(name: string, color: string) {
     .from('divisions')
     .insert({ name, color, order_index: Date.now() })
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw error;
-  return data;
+  return data as Division;
 }
 
 export async function updateDivisionData(
@@ -614,7 +746,7 @@ export async function createPerson(name: string, email?: string) {
     .from('people')
     .insert({ name, email: email || null })
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
   return person;
@@ -649,18 +781,21 @@ export async function createIdea(data: {
   submitted_by?: string | null;
   directed_to?: string | null;
 }) {
-  const { data: { user } } = await supabase.auth.getUser();
-  let orgTag = null;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let orgTag: string | null = null;
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('organization_tag')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
     orgTag = profile?.organization_tag || null;
   }
 
-  const { data: idea, error } = await supabase
+  let { data: idea, error } = await supabase
     .from('ideas')
     .insert({
       title: data.title,
@@ -678,21 +813,39 @@ export async function createIdea(data: {
       tags:idea_tags(tag:tags(*))
     `
     )
-    .single();
+    .maybeSingle();
+
+  if (error) {
+    console.warn('createIdea: deep select failed, using plain', error);
+    const plain = await supabase
+      .from('ideas')
+      .insert({
+        title: data.title,
+        description: data.description || '',
+        attachments: data.attachments || [],
+        links: data.links || [],
+        tag_ids: data.tag_ids || [],
+        submitted_by: data.submitted_by || null,
+        directed_to: data.directed_to || null,
+        organization_tag: orgTag,
+      })
+      .select('*')
+      .maybeSingle();
+
+    idea = plain.data;
+    error = plain.error;
+  }
 
   if (error) throw error;
 
   await supabase.from('event_log').insert({
     entity_type: 'idea',
-    entity_id: idea.id,
+    entity_id: idea?.id,
     action: 'created',
     changes: { idea },
   });
 
-  return {
-    ...idea,
-    tags: idea.tags?.map((t: any) => t.tag) || [],
-  };
+  return safeFormatIdea(idea);
 }
 
 export async function updateIdeaData(id: string, updates: Partial<Idea>) {
@@ -729,18 +882,4 @@ export async function deleteIdea(id: string) {
     action: 'deleted',
     changes: {},
   });
-}
-
-/* -------------------------------------------------------------------------- */
-/*                                   HELPERS                                  */
-/* -------------------------------------------------------------------------- */
-
-function formatTask(task: any): Task {
-  return {
-    ...task,
-    tags: task.tags?.map((t: any) => t.tag) || [],
-    divisions: task.divisions?.map((d: any) => d.division) || [],
-    subtasks: task.subtasks || [],
-    notes: task.notes || [],
-  };
 }
