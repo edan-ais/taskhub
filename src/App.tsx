@@ -4,6 +4,7 @@ import { supabase } from './lib/supabase';
 import Auth from './components/Auth';
 import { Navigation } from './components/Navigation';
 import { BottomNavigation } from './components/BottomNavigation';
+import AdminDashboard from './components/AdminDashboard';
 import { useAppStore } from './lib/store';
 import { useData } from './hooks/useData';
 import { LoadingSpinner } from './components/LoadingSpinner';
@@ -74,6 +75,7 @@ export default function App() {
         {activeTab === 'calendar' && <CalendarTab />}
         {activeTab === 'ideas' && <IdeasTab />}
         {activeTab === 'analytics' && <AnalyticsTab />}
+        {activeTab === 'admin' && user?.email === 'edanharrofficial@gmail.com' && <AdminDashboard />}
       </main>
       <BottomNavigation />
     </div>
