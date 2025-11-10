@@ -25,13 +25,42 @@ export function useData() {
   } = useAppStore();
 
   const [isLoading, setIsLoading] = useState(true);
+  const [userOrgTag, setUserOrgTag] = useState<string | null>(null);
+
+  /* ----------------------------- FETCH USER TAG ---------------------------- */
+  const fetchUserOrgTag = useCallback(async () => {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      console.warn('No user session found.');
+      setUserOrgTag(null);
+      return null;
+    }
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('organization_tag')
+      .eq('user_id', user.id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching profile:', error);
+      setUserOrgTag(null);
+      return null;
+    }
+
+    setUserOrgTag(profile?.organization_tag || null);
+    return profile?.organization_tag || null;
+  }, []);
 
   /* --------------------------- TASK DEDUPLICATION -------------------------- */
   function deduplicateTasks(tasks: Task[]): Task[] {
     const uniqueMap = new Map<string, Task>();
 
     for (const task of tasks) {
-      // normalize title/description to avoid tiny differences
       const key = `${task.title?.trim().toLowerCase() || ''}|${
         task.description?.trim().toLowerCase() || ''
       }`;
@@ -41,7 +70,6 @@ export function useData() {
       if (!existing) {
         uniqueMap.set(key, task);
       } else {
-        // pick the richer one (more related elements)
         const currentScore =
           (existing.tags?.length || 0) +
           (existing.divisions?.length || 0) +
@@ -65,34 +93,45 @@ export function useData() {
 
   /* ------------------------------ FETCH TASKS ----------------------------- */
   const fetchTasks = useCallback(async () => {
-    const { data: tasks, error } = await supabase
-      .from('tasks')
-      .select(
+    try {
+      const orgTag = userOrgTag || (await fetchUserOrgTag());
+      if (!orgTag) {
+        console.warn('No organization tag found. Loading no tasks.');
+        setTasks([]);
+        return;
+      }
+
+      const { data: tasks, error } = await supabase
+        .from('tasks')
+        .select(
+          `
+          *,
+          tags:task_tags(tag:tags(*)),
+          divisions:task_divisions(division:divisions(*)),
+          subtasks(*),
+          notes(*)
         `
-        *,
-        tags:task_tags(tag:tags(*)),
-        divisions:task_divisions(division:divisions(*)),
-        subtasks(*),
-        notes(*)
-      `
-      )
-      .order('order_rank', { ascending: true });
+        )
+        .order('order_rank', { ascending: true });
 
-    if (error) {
-      console.error('Error fetching tasks:', error);
-      return;
+      if (error) throw error;
+
+      const formattedTasks: Task[] = (tasks || [])
+        .map((task: any) => formatTask(task))
+        .filter((task) =>
+          task.tags?.some(
+            (t: any) =>
+              t?.name?.toLowerCase() === orgTag.toLowerCase() ||
+              t?.name?.toLowerCase() === 'global'
+          )
+        );
+
+      const uniqueTasks = deduplicateTasks(formattedTasks);
+      setTasks(uniqueTasks);
+    } catch (err) {
+      console.error('Error fetching tasks:', err);
     }
-
-    // format each to have tags/divisions flattened
-    const formattedTasks: Task[] = (tasks || []).map((task: any) =>
-      formatTask(task)
-    );
-
-    // remove dupes caused by slow saves
-    const uniqueTasks = deduplicateTasks(formattedTasks);
-
-    setTasks(uniqueTasks);
-  }, [setTasks]);
+  }, [setTasks, userOrgTag, fetchUserOrgTag]);
 
   /* ----------------------------- FETCH DIVISIONS ---------------------------- */
   const fetchDivisions = useCallback(async () => {
@@ -126,6 +165,7 @@ export function useData() {
 
   /* ------------------------------ FETCH IDEAS ------------------------------ */
   const fetchIdeas = useCallback(async () => {
+    const orgTag = userOrgTag || (await fetchUserOrgTag());
     const { data: ideas, error } = await supabase
       .from('ideas')
       .select(
@@ -141,13 +181,21 @@ export function useData() {
       return;
     }
 
-    const formattedIdeas: Idea[] = (ideas || []).map((idea: any) => ({
-      ...idea,
-      tags: idea.tags?.map((t: any) => t.tag) || [],
-    }));
+    const formattedIdeas: Idea[] = (ideas || [])
+      .map((idea: any) => ({
+        ...idea,
+        tags: idea.tags?.map((t: any) => t.tag) || [],
+      }))
+      .filter((idea) =>
+        idea.tags?.some(
+          (t: any) =>
+            t?.name?.toLowerCase() === orgTag?.toLowerCase() ||
+            t?.name?.toLowerCase() === 'global'
+        )
+      );
 
     setIdeas(formattedIdeas);
-  }, [setIdeas]);
+  }, [setIdeas, userOrgTag, fetchUserOrgTag]);
 
   /* ------------------------------ FETCH PEOPLE ----------------------------- */
   const fetchPeople = useCallback(async () => {
@@ -193,6 +241,7 @@ export function useData() {
   useEffect(() => {
     const loadAllData = async () => {
       setIsLoading(true);
+      await fetchUserOrgTag();
       await Promise.all([
         fetchTasks(),
         fetchDivisions(),
@@ -206,7 +255,6 @@ export function useData() {
 
     loadAllData();
 
-    // tasks + related tables
     const tasksChannel = supabase
       .channel('tasks-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, fetchTasks)
@@ -260,6 +308,7 @@ export function useData() {
     fetchIdeas,
     fetchPeople,
     fetchEmails,
+    fetchUserOrgTag,
     removeTask,
   ]);
 
