@@ -1,12 +1,23 @@
-import { Home, Users, Tag, Calendar, Lightbulb, BarChart3 } from 'lucide-react';
+import {
+  Home,
+  Users,
+  Tag,
+  Calendar,
+  Lightbulb,
+  BarChart3,
+  Shield,
+} from 'lucide-react';
 import { useAppStore } from '../lib/store';
+import { useAuth } from '../hooks/useAuth';
 import type { TabName } from '../lib/types';
 import { motion } from 'framer-motion';
 
 export function BottomNavigation() {
   const { activeTab, setActiveTab } = useAppStore();
+  const { user } = useAuth();
 
-  const tabs: { id: TabName; label: string; icon: React.ReactNode; color: string }[] = [
+  // ✅ Base tabs everyone can see
+  let tabs: { id: TabName; label: string; icon: React.ReactNode; color: string }[] = [
     { id: 'home', label: 'Home', icon: <Home size={24} />, color: '#EF4444' },
     { id: 'people', label: 'People', icon: <Users size={24} />, color: '#10B981' },
     { id: 'tags', label: 'Tags', icon: <Tag size={24} />, color: '#F97316' },
@@ -15,24 +26,30 @@ export function BottomNavigation() {
     { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={24} />, color: '#8B5CF6' },
   ];
 
+  // ✅ Add admin tab only for you
+  if (user?.email === 'edanharrofficial@gmail.com') {
+    tabs.push({
+      id: 'admin' as TabName,
+      label: 'Admin',
+      icon: <Shield size={24} />,
+      color: '#0EA5E9',
+    });
+  }
+
   const activeIndex = tabs.findIndex((t) => t.id === activeTab);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t-2 border-slate-200 shadow-lg">
       <div className="max-w-[1920px] mx-auto px-2">
-        {/* this is the container the pill will align to */}
         <div className="flex items-center justify-around h-16 relative">
-          {/* sliding pill, NO glow, fixed vertical position */}
+          {/* Sliding highlight */}
           <motion.div
-            // single element that moves left/right
             className="absolute top-2 bottom-2 rounded-2xl pointer-events-none"
             style={{
-              // width = one tab
               width: `calc(100% / ${tabs.length})`,
-              backgroundColor: `${tabs[activeIndex]?.color}22`, // subtle tint, no glow
+              backgroundColor: `${tabs[activeIndex]?.color}22`,
             }}
             animate={{
-              // move exactly one tab at a time
               left: `calc(${activeIndex} * (100% / ${tabs.length}))`,
             }}
             transition={{
