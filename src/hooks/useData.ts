@@ -101,7 +101,9 @@ export function useData() {
         return;
       }
 
-      const { data: tasks, error } = await supabase
+      // Admin orgs get all tasks; others see only their org's
+      const isAdminOrg = orgTag === 'WW529400';
+      const query = supabase
         .from('tasks')
         .select(
           `
@@ -114,17 +116,14 @@ export function useData() {
         )
         .order('order_rank', { ascending: true });
 
+      if (!isAdminOrg) query.eq('organization_tag', orgTag);
+
+      const { data: tasks, error } = await query;
       if (error) throw error;
 
-      const formattedTasks: Task[] = (tasks || [])
-        .map((task: any) => formatTask(task))
-        .filter((task) =>
-          task.tags?.some(
-            (t: any) =>
-              t?.name?.toLowerCase() === orgTag.toLowerCase() ||
-              t?.name?.toLowerCase() === 'global'
-          )
-        );
+      const formattedTasks: Task[] = (tasks || []).map((task: any) =>
+        formatTask(task)
+      );
 
       const uniqueTasks = deduplicateTasks(formattedTasks);
       setTasks(uniqueTasks);
@@ -166,7 +165,9 @@ export function useData() {
   /* ------------------------------ FETCH IDEAS ------------------------------ */
   const fetchIdeas = useCallback(async () => {
     const orgTag = userOrgTag || (await fetchUserOrgTag());
-    const { data: ideas, error } = await supabase
+    const isAdminOrg = orgTag === 'WW529400';
+
+    const query = supabase
       .from('ideas')
       .select(
         `
@@ -176,23 +177,18 @@ export function useData() {
       )
       .order('created_at', { ascending: false });
 
+    if (!isAdminOrg) query.eq('organization_tag', orgTag);
+
+    const { data: ideas, error } = await query;
     if (error) {
       console.error('Error fetching ideas:', error);
       return;
     }
 
-    const formattedIdeas: Idea[] = (ideas || [])
-      .map((idea: any) => ({
-        ...idea,
-        tags: idea.tags?.map((t: any) => t.tag) || [],
-      }))
-      .filter((idea) =>
-        idea.tags?.some(
-          (t: any) =>
-            t?.name?.toLowerCase() === orgTag?.toLowerCase() ||
-            t?.name?.toLowerCase() === 'global'
-        )
-      );
+    const formattedIdeas: Idea[] = (ideas || []).map((idea: any) => ({
+      ...idea,
+      tags: idea.tags?.map((t: any) => t.tag) || [],
+    }));
 
     setIdeas(formattedIdeas);
   }, [setIdeas, userOrgTag, fetchUserOrgTag]);
@@ -257,15 +253,7 @@ export function useData() {
 
     const tasksChannel = supabase
       .channel('tasks-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, fetchTasks)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, fetchTasks)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
-        removeTask(payload.old.id);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'subtasks' }, fetchTasks)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, fetchTasks)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_tags' }, fetchTasks)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_divisions' }, fetchTasks)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, fetchTasks)
       .subscribe();
 
     const tagsChannel = supabase
@@ -335,6 +323,18 @@ export async function createTask(data: {
   due_date?: string | null;
   order_rank?: number;
 }) {
+  // Fetch user's org tag to attach to task
+  const { data: { user } } = await supabase.auth.getUser();
+  let orgTag = null;
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_tag')
+      .eq('user_id', user.id)
+      .single();
+    orgTag = profile?.organization_tag || null;
+  }
+
   const { data: task, error } = await supabase
     .from('tasks')
     .insert({
@@ -344,6 +344,7 @@ export async function createTask(data: {
       assignee: data.assignee || '',
       due_date: data.due_date || null,
       order_rank: data.order_rank || Date.now(),
+      organization_tag: orgTag,
     })
     .select(
       `
@@ -648,6 +649,17 @@ export async function createIdea(data: {
   submitted_by?: string | null;
   directed_to?: string | null;
 }) {
+  const { data: { user } } = await supabase.auth.getUser();
+  let orgTag = null;
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_tag')
+      .eq('user_id', user.id)
+      .single();
+    orgTag = profile?.organization_tag || null;
+  }
+
   const { data: idea, error } = await supabase
     .from('ideas')
     .insert({
@@ -658,6 +670,7 @@ export async function createIdea(data: {
       tag_ids: data.tag_ids || [],
       submitted_by: data.submitted_by || null,
       directed_to: data.directed_to || null,
+      organization_tag: orgTag,
     })
     .select(
       `
