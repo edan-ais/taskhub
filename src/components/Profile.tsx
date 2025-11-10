@@ -1,46 +1,225 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { Loader2, CheckCircle2, Shield, User } from 'lucide-react';
 
 export default function Profile() {
-  const [orgTag, setOrgTag] = useState('');
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [allProfiles, setAllProfiles] = useState<any[]>([]);
 
+  // Load current user's profile and check if admin
   useEffect(() => {
     const loadProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase.from('profiles').select('organization_tag').eq('user_id', user.id).single();
-      setOrgTag(data?.organization_tag || '');
+
+      // Fetch own profile
+      const { data: profileData, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return;
+      }
+
+      setProfile(profileData);
+      setIsAdmin(profileData?.organization_tag === 'WW529400');
+      setLoading(false);
     };
     loadProfile();
   }, []);
 
-  const save = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+  // If admin, fetch all profiles
+  useEffect(() => {
+    if (!isAdmin) return;
+    const loadAllProfiles = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, user_id, email, organization_tag, approved, permission_level');
+      if (error) console.error('Error loading all profiles:', error);
+      else setAllProfiles(data || []);
+    };
+    loadAllProfiles();
+  }, [isAdmin]);
+
+  const saveOwnProfile = async () => {
+    if (!profile) return;
     const { error } = await supabase
       .from('profiles')
-      .update({ organization_tag: orgTag, updated_at: new Date().toISOString() })
-      .eq('user_id', user.id);
+      .update({
+        organization_tag: profile.organization_tag,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', profile.id);
     setMessage(error ? error.message : 'Saved!');
+    setEditing(false);
   };
 
+  const updateUserPermissions = async (userId: string, updates: any) => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
+    setMessage(error ? error.message : 'Updated!');
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-slate-600">
+        <Loader2 className="animate-spin mb-2" size={28} />
+        <p>Loading profile...</p>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="text-center py-10 text-slate-600">
+        <p>No profile found.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6 max-w-md mx-auto bg-white shadow rounded-xl">
-      <h2 className="text-xl font-bold mb-3">Profile</h2>
-      <label className="block text-sm font-medium">Organization Tag</label>
-      <input
-        value={orgTag}
-        onChange={(e) => setOrgTag(e.target.value)}
-        className="border w-full p-2 rounded mb-4"
-      />
-      <button
-        onClick={save}
-        className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
-      >
-        Save
-      </button>
-      {message && <p className="mt-3 text-sm text-gray-600">{message}</p>}
+    <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow">
+      <div className="flex items-center gap-2 mb-4">
+        <CheckCircle2 className="text-blue-600" size={28} />
+        <h2 className="text-2xl font-bold text-slate-800">My Profile</h2>
+      </div>
+
+      <div className="border-t border-slate-200 pt-4 space-y-2">
+        <p>
+          <span className="font-medium text-slate-700">Email:</span>{' '}
+          {profile.email || '—'}
+        </p>
+        <p>
+          <span className="font-medium text-slate-700">Organization ID:</span>{' '}
+          {editing ? (
+            <input
+              className="border border-slate-300 rounded px-2 py-1 text-sm"
+              value={profile.organization_tag || ''}
+              onChange={(e) =>
+                setProfile({ ...profile, organization_tag: e.target.value })
+              }
+            />
+          ) : (
+            <span>{profile.organization_tag || '—'}</span>
+          )}
+        </p>
+        <p>
+          <span className="font-medium text-slate-700">Permission Level:</span>{' '}
+          {profile.permission_level || 'Member'}
+        </p>
+        <p>
+          <span className="font-medium text-slate-700">Approved:</span>{' '}
+          {profile.approved ? '✅ Approved' : '❌ Pending'}
+        </p>
+      </div>
+
+      <div className="mt-4 flex gap-3">
+        {!isAdmin && (
+          <>
+            {editing ? (
+              <button
+                onClick={saveOwnProfile}
+                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+              >
+                Save
+              </button>
+            ) : (
+              <button
+                onClick={() => setEditing(true)}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+              >
+                Edit
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      {message && (
+        <p className="mt-3 text-sm text-slate-600 bg-slate-50 border rounded p-2">
+          {message}
+        </p>
+      )}
+
+      {/* ADMIN PANEL */}
+      {isAdmin && (
+        <div className="mt-10">
+          <div className="flex items-center gap-2 mb-3">
+            <Shield className="text-purple-600" size={22} />
+            <h3 className="text-lg font-semibold text-slate-800">
+              Admin: Manage Users
+            </h3>
+          </div>
+          {allProfiles.length === 0 ? (
+            <p className="text-slate-500 text-sm">No users found.</p>
+          ) : (
+            <div className="border rounded-lg divide-y">
+              {allProfiles.map((p) => (
+                <div
+                  key={p.user_id}
+                  className="p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                >
+                  <div>
+                    <p className="font-medium text-slate-800 flex items-center gap-1">
+                      <User size={16} /> {p.email}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Org: {p.organization_tag || '—'} |{' '}
+                      {p.approved ? '✅ Approved' : '❌ Pending'} |{' '}
+                      {p.permission_level}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      placeholder="Org ID"
+                      defaultValue={p.organization_tag || ''}
+                      onChange={(e) =>
+                        (p.organization_tag = e.target.value.trim())
+                      }
+                      className="border border-slate-300 rounded px-2 py-1 text-xs"
+                    />
+                    <select
+                      defaultValue={p.permission_level || 'member'}
+                      onChange={(e) =>
+                        (p.permission_level = e.target.value)
+                      }
+                      className="border border-slate-300 rounded px-2 py-1 text-xs"
+                    >
+                      <option value="member">Member</option>
+                      <option value="manager">Manager</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                    <button
+                      onClick={() =>
+                        updateUserPermissions(p.user_id, {
+                          organization_tag: p.organization_tag,
+                          permission_level: p.permission_level,
+                          approved: true,
+                        })
+                      }
+                      className="bg-green-500 hover:bg-green-600 text-white text-xs px-3 py-1 rounded"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
