@@ -1,5 +1,7 @@
 import { useData } from './hooks/useData';
 import { useAppStore } from './lib/store';
+import { useAuth } from './hooks/useAuth';
+import Auth from './components/Auth';
 import { Navigation } from './components/Navigation';
 import { BottomNavigation } from './components/BottomNavigation';
 import { HomeTab } from './components/tabs/HomeTab';
@@ -14,17 +16,24 @@ import { LoadingSpinner } from './components/LoadingSpinner';
 
 export default function App() {
   const { isLoading } = useData();
+  const { user, loading: authLoading, signOut } = useAuth();
   const { activeTab, deleteConfirmation, hideDeleteConfirmation } = useAppStore();
 
-  if (isLoading) {
+  if (authLoading || isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
           <LoadingSpinner size={48} className="text-blue-600 mb-4" />
-          <p className="text-slate-600 text-lg font-medium">Loading TaskHUB...</p>
+          <p className="text-slate-600 text-lg font-medium">
+            Loading TaskHUB...
+          </p>
         </div>
       </div>
     );
+  }
+
+  if (!user) {
+    return <Auth />;
   }
 
   return (
@@ -32,6 +41,15 @@ export default function App() {
       <Navigation />
 
       <main className="pt-20 pb-24 px-4 md:px-6 lg:px-8 max-w-[1920px] mx-auto">
+        <div className="flex justify-end mb-2">
+          <button
+            onClick={signOut}
+            className="text-sm text-pink-600 hover:text-pink-700"
+          >
+            Log out
+          </button>
+        </div>
+
         {activeTab === 'home' && <HomeTab />}
         {activeTab === 'people' && <PeopleTab />}
         {activeTab === 'tags' && <TagsTab />}
