@@ -1,6 +1,6 @@
-import { useEffect, useCallback, useState } from "react";
-import { supabase } from "../lib/supabase";
-import { useAppStore } from "../lib/store";
+import { useEffect, useCallback, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { useAppStore } from '../lib/store';
 import type {
   Task,
   Division,
@@ -8,51 +8,52 @@ import type {
   Idea,
   Lane,
   InboundEmail,
-} from "../lib/types";
+} from '../lib/types';
 
 /* -------------------------------------------------------------------------- */
-/*                         SHARED ORG-TAG LOOKUP HELPER                       */
+/*                     SHARED ORG TAG HELPER (ADDED)                          */
 /* -------------------------------------------------------------------------- */
 /**
- * Gets the current user's organization tag.
- * 1) tries by user_id
- * 2) falls back to email
- * This is the single source of truth so all parts of the app behave the same.
+ * Try to get the current user's organization_tag.
+ * 1) by user_id
+ * 2) fall back to email (helps if we created rows manually)
  */
-export async function getOrgTagForUser(): Promise<string | null> {
+async function getCurrentUserOrgTag(): Promise<string | null> {
   const {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
-    console.warn("⚠️ No user session found when getting org tag.");
+    console.warn('No user session found.');
     return null;
   }
 
-  // Try by user_id first
-  let { data: profile, error } = await supabase
-    .from("profiles")
-    .select("organization_tag, email")
-    .eq("user_id", user.id)
+  // try by user_id
+  const { data: profileById } = await supabase
+    .from('profiles')
+    .select('organization_tag')
+    .eq('user_id', user.id)
     .maybeSingle();
 
-  // Fallback: try by email if user_id doesn’t match
-  if ((!profile || !profile.organization_tag) && user.email) {
-    const { data: fallback } = await supabase
-      .from("profiles")
-      .select("organization_tag")
-      .eq("email", user.email)
+  if (profileById?.organization_tag) {
+    return profileById.organization_tag;
+  }
+
+  // fallback by email
+  if (user.email) {
+    const { data: profileByEmail } = await supabase
+      .from('profiles')
+      .select('organization_tag')
+      .eq('email', user.email)
       .maybeSingle();
-    profile = fallback;
+
+    if (profileByEmail?.organization_tag) {
+      return profileByEmail.organization_tag;
+    }
   }
 
-  if (error) {
-    console.warn("Error fetching organization tag:", error.message);
-  }
-
-  console.log("✅ getOrgTagForUser found:", profile?.organization_tag);
-  return profile?.organization_tag || null;
+  return null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -74,7 +75,7 @@ export function useData() {
 
   /* ----------------------------- FETCH USER TAG ---------------------------- */
   const fetchUserOrgTag = useCallback(async () => {
-    const tag = await getOrgTagForUser();
+    const tag = await getCurrentUserOrgTag();
     setUserOrgTag(tag);
     return tag;
   }, []);
@@ -84,8 +85,9 @@ export function useData() {
     const uniqueMap = new Map<string, Task>();
 
     for (const task of tasks) {
-      const key = `${task.title?.trim().toLowerCase() || ""}|${
-        task.description?.trim().toLowerCase() || ""
+      // normalize title/description to avoid tiny differences
+      const key = `${task.title?.trim().toLowerCase() || ''}|${
+        task.description?.trim().toLowerCase() || ''
       }`;
 
       const existing = uniqueMap.get(key);
@@ -93,6 +95,7 @@ export function useData() {
       if (!existing) {
         uniqueMap.set(key, task);
       } else {
+        // pick the richer one (more related elements)
         const currentScore =
           (existing.tags?.length || 0) +
           (existing.divisions?.length || 0) +
@@ -118,55 +121,63 @@ export function useData() {
   const fetchTasks = useCallback(async () => {
     try {
       const orgTag = userOrgTag || (await fetchUserOrgTag());
+
       if (!orgTag) {
-        console.warn("⚠️ No organization tag found. Skipping task load.");
+        console.warn('No organization tag found. Loading no tasks.');
         setTasks([]);
         return;
       }
 
-      const isAdminOrg = orgTag === "WW529400";
+      // admin org gets all tasks
+      const isAdminOrg = orgTag === 'WW529400';
 
       const query = supabase
-        .from("tasks")
+        .from('tasks')
         .select(
           `
-          *,
-          tags:task_tags(tag:tags(*)),
-          divisions:task_divisions(division:divisions(*)),
-          subtasks(*),
-          notes(*)
-        `
+        *,
+        tags:task_tags(tag:tags(*)),
+        divisions:task_divisions(division:divisions(*)),
+        subtasks(*),
+        notes(*)
+      `
         )
-        .order("order_rank", { ascending: true });
+        .order('order_rank', { ascending: true });
 
-      // non-admins see only their org’s tasks
       if (!isAdminOrg) {
-        query.eq("organization_tag", orgTag);
+        query.eq('organization_tag', orgTag);
       }
 
       const { data: tasks, error } = await query;
-      if (error) throw error;
 
+      if (error) {
+        console.error('Error fetching tasks:', error);
+        return;
+      }
+
+      // format each to have tags/divisions flattened
       const formattedTasks: Task[] = (tasks || []).map((task: any) =>
         formatTask(task)
       );
 
+      // remove dupes caused by slow saves
       const uniqueTasks = deduplicateTasks(formattedTasks);
+
       setTasks(uniqueTasks);
     } catch (err) {
-      console.error("❌ Error fetching tasks:", err);
+      console.error('Error fetching tasks:', err);
     }
   }, [setTasks, userOrgTag, fetchUserOrgTag]);
 
   /* ----------------------------- FETCH DIVISIONS ---------------------------- */
   const fetchDivisions = useCallback(async () => {
     const { data, error } = await supabase
-      .from("divisions")
-      .select("*")
-      .order("order_index", { ascending: true });
+      .from('divisions')
+      .select('*')
+      .order('order_index', { ascending: true });
 
     if (error) {
-      console.error("❌ Error fetching divisions:", error);
+      console.error('Error fetching divisions:', error);
       return;
     }
 
@@ -176,12 +187,12 @@ export function useData() {
   /* ------------------------------- FETCH TAGS ------------------------------ */
   const fetchTags = useCallback(async () => {
     const { data, error } = await supabase
-      .from("tags")
-      .select("*")
-      .order("order_index", { ascending: true });
+      .from('tags')
+      .select('*')
+      .order('order_index', { ascending: true });
 
     if (error) {
-      console.error("❌ Error fetching tags:", error);
+      console.error('Error fetching tags:', error);
       return;
     }
 
@@ -191,25 +202,26 @@ export function useData() {
   /* ------------------------------ FETCH IDEAS ------------------------------ */
   const fetchIdeas = useCallback(async () => {
     const orgTag = userOrgTag || (await fetchUserOrgTag());
-    const isAdminOrg = orgTag === "WW529400";
+    const isAdminOrg = orgTag === 'WW529400';
 
-    const query = supabase
-      .from("ideas")
+    const query = await supabase
+      .from('ideas')
       .select(
         `
         *,
         tags:idea_tags(tag:tags(*))
       `
       )
-      .order("created_at", { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (!isAdminOrg) {
-      query.eq("organization_tag", orgTag);
+      query.eq('organization_tag', orgTag);
     }
 
     const { data: ideas, error } = await query;
+
     if (error) {
-      console.error("❌ Error fetching ideas:", error);
+      console.error('Error fetching ideas:', error);
       return;
     }
 
@@ -224,12 +236,12 @@ export function useData() {
   /* ------------------------------ FETCH PEOPLE ----------------------------- */
   const fetchPeople = useCallback(async () => {
     const { data, error } = await supabase
-      .from("people")
-      .select("*")
-      .order("name", { ascending: true });
+      .from('people')
+      .select('*')
+      .order('name', { ascending: true });
 
     if (error) {
-      console.error("❌ Error fetching people:", error);
+      console.error('Error fetching people:', error);
       return;
     }
 
@@ -239,17 +251,17 @@ export function useData() {
   /* ------------------------------ FETCH EMAILS ----------------------------- */
   const fetchEmails = useCallback(async () => {
     const { data: emails, error } = await supabase
-      .from("inbound_emails")
+      .from('inbound_emails')
       .select(
         `
         *,
         attachments:email_attachments(*)
       `
       )
-      .order("received_at", { ascending: false });
+      .order('received_at', { ascending: false });
 
     if (error) {
-      console.error("❌ Error fetching emails:", error);
+      console.error('Error fetching emails:', error);
       return;
     }
 
@@ -279,93 +291,43 @@ export function useData() {
 
     loadAllData();
 
-    // keep original realtime behavior: tasks + related tables
+    // tasks + related tables
     const tasksChannel = supabase
-      .channel("tasks-changes")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "tasks" },
-        fetchTasks
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "tasks" },
-        fetchTasks
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "tasks" },
-        (payload) => {
-          if (payload.old?.id) {
-            removeTask(payload.old.id);
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "subtasks" },
-        fetchTasks
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notes" },
-        fetchTasks
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "task_tags" },
-        fetchTasks
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "task_divisions" },
-        fetchTasks
-      )
+      .channel('tasks-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, fetchTasks)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, fetchTasks)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
+        removeTask(payload.old.id);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'subtasks' }, fetchTasks)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, fetchTasks)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_tags' }, fetchTasks)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_divisions' }, fetchTasks)
       .subscribe();
 
     const tagsChannel = supabase
-      .channel("tags-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "tags" },
-        fetchTags
-      )
+      .channel('tags-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tags' }, fetchTags)
       .subscribe();
 
     const divisionsChannel = supabase
-      .channel("divisions-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "divisions" },
-        fetchDivisions
-      )
+      .channel('divisions-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'divisions' }, fetchDivisions)
       .subscribe();
 
     const ideasChannel = supabase
-      .channel("ideas-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "ideas" },
-        fetchIdeas
-      )
+      .channel('ideas-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ideas' }, fetchIdeas)
       .subscribe();
 
     const peopleChannel = supabase
-      .channel("people-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "people" },
-        fetchPeople
-      )
+      .channel('people-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'people' }, fetchPeople)
       .subscribe();
 
     const emailsChannel = supabase
-      .channel("emails-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "inbound_emails" },
-        fetchEmails
-      )
+      .channel('emails-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inbound_emails' }, fetchEmails)
       .subscribe();
 
     return () => {
@@ -401,6 +363,7 @@ export function useData() {
 /* -------------------------------------------------------------------------- */
 /*                             TASK CRUD OPERATIONS                           */
 /* -------------------------------------------------------------------------- */
+
 export async function createTask(data: {
   title: string;
   description?: string;
@@ -409,15 +372,16 @@ export async function createTask(data: {
   due_date?: string | null;
   order_rank?: number;
 }) {
-  const orgTag = await getOrgTagForUser();
+  // Fetch user's org tag to attach to task
+  const orgTag = await getCurrentUserOrgTag();
 
   const { data: task, error } = await supabase
-    .from("tasks")
+    .from('tasks')
     .insert({
       title: data.title,
-      description: data.description || "",
-      lane: data.lane || "red",
-      assignee: data.assignee || "",
+      description: data.description || '',
+      lane: data.lane || 'red',
+      assignee: data.assignee || '',
       due_date: data.due_date || null,
       order_rank: data.order_rank || Date.now(),
       organization_tag: orgTag,
@@ -435,10 +399,10 @@ export async function createTask(data: {
 
   if (error) throw error;
 
-  await supabase.from("event_log").insert({
-    entity_type: "task",
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
     entity_id: task.id,
-    action: "created",
+    action: 'created',
     changes: { task },
   });
 
@@ -447,28 +411,28 @@ export async function createTask(data: {
 
 export async function updateTaskData(id: string, updates: Partial<Task>) {
   const { error } = await supabase
-    .from("tasks")
+    .from('tasks')
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq('id', id);
 
   if (error) throw error;
 
-  await supabase.from("event_log").insert({
-    entity_type: "task",
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
     entity_id: id,
-    action: "updated",
+    action: 'updated',
     changes: updates,
   });
 }
 
 export async function deleteTask(id: string) {
-  const { error } = await supabase.from("tasks").delete().eq("id", id);
+  const { error } = await supabase.from('tasks').delete().eq('id', id);
   if (error) throw error;
 
-  await supabase.from("event_log").insert({
-    entity_type: "task",
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
     entity_id: id,
-    action: "deleted",
+    action: 'deleted',
     changes: {},
   });
 }
@@ -480,18 +444,18 @@ export async function moveTask(id: string, lane: Lane, order_rank: number) {
     updated_at: new Date().toISOString(),
   };
 
-  if (lane === "green") {
+  if (lane === 'green') {
     updates.completed_at = new Date().toISOString();
-    updates.progress_state = "completed";
+    updates.progress_state = 'completed';
   }
 
-  const { error } = await supabase.from("tasks").update(updates).eq("id", id);
+  const { error } = await supabase.from('tasks').update(updates).eq('id', id);
   if (error) throw error;
 
-  await supabase.from("event_log").insert({
-    entity_type: "task",
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
     entity_id: id,
-    action: "moved",
+    action: 'moved',
     changes: { lane, order_rank },
   });
 }
@@ -499,32 +463,33 @@ export async function moveTask(id: string, lane: Lane, order_rank: number) {
 /* -------------------------------------------------------------------------- */
 /*                           TAG/TASK LINKING HELPERS                         */
 /* -------------------------------------------------------------------------- */
+
 export async function addTagToTask(taskId: string, tagId: string) {
   const { error } = await supabase
-    .from("task_tags")
+    .from('task_tags')
     .insert({ task_id: taskId, tag_id: tagId });
   if (error) throw error;
 
-  await supabase.from("event_log").insert({
-    entity_type: "task",
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
     entity_id: taskId,
-    action: "tagged",
+    action: 'tagged',
     changes: { tag_id: tagId },
   });
 }
 
 export async function removeTagFromTask(taskId: string, tagId: string) {
   const { error } = await supabase
-    .from("task_tags")
+    .from('task_tags')
     .delete()
-    .eq("task_id", taskId)
-    .eq("tag_id", tagId);
+    .eq('task_id', taskId)
+    .eq('tag_id', tagId);
   if (error) throw error;
 
-  await supabase.from("event_log").insert({
-    entity_type: "task",
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
     entity_id: taskId,
-    action: "untagged",
+    action: 'untagged',
     changes: { tag_id: tagId },
   });
 }
@@ -532,35 +497,33 @@ export async function removeTagFromTask(taskId: string, tagId: string) {
 /* -------------------------------------------------------------------------- */
 /*                         DIVISION/TASK LINKING HELPERS                      */
 /* -------------------------------------------------------------------------- */
+
 export async function addDivisionToTask(taskId: string, divisionId: string) {
   const { error } = await supabase
-    .from("task_divisions")
+    .from('task_divisions')
     .insert({ task_id: taskId, division_id: divisionId });
   if (error) throw error;
 
-  await supabase.from("event_log").insert({
-    entity_type: "task",
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
     entity_id: taskId,
-    action: "division_added",
+    action: 'division_added',
     changes: { division_id: divisionId },
   });
 }
 
-export async function removeDivisionFromTask(
-  taskId: string,
-  divisionId: string
-) {
+export async function removeDivisionFromTask(taskId: string, divisionId: string) {
   const { error } = await supabase
-    .from("task_divisions")
+    .from('task_divisions')
     .delete()
-    .eq("task_id", taskId)
-    .eq("division_id", divisionId);
+    .eq('task_id', taskId)
+    .eq('division_id', divisionId);
   if (error) throw error;
 
-  await supabase.from("event_log").insert({
-    entity_type: "task",
+  await supabase.from('event_log').insert({
+    entity_type: 'task',
     entity_id: taskId,
-    action: "division_removed",
+    action: 'division_removed',
     changes: { division_id: divisionId },
   });
 }
@@ -568,13 +531,14 @@ export async function removeDivisionFromTask(
 /* -------------------------------------------------------------------------- */
 /*                               SUBTASKS CRUD                                */
 /* -------------------------------------------------------------------------- */
+
 export async function createSubtask(
   taskId: string,
   title: string,
   order_rank?: number
 ) {
   const { data: subtask, error } = await supabase
-    .from("subtasks")
+    .from('subtasks')
     .insert({
       task_id: taskId,
       title,
@@ -589,23 +553,24 @@ export async function createSubtask(
 
 export async function updateSubtask(id: string, updates: any) {
   const { error } = await supabase
-    .from("subtasks")
+    .from('subtasks')
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq('id', id);
   if (error) throw error;
 }
 
 export async function deleteSubtask(id: string) {
-  const { error } = await supabase.from("subtasks").delete().eq("id", id);
+  const { error } = await supabase.from('subtasks').delete().eq('id', id);
   if (error) throw error;
 }
 
 /* -------------------------------------------------------------------------- */
 /*                                 NOTES CRUD                                 */
 /* -------------------------------------------------------------------------- */
+
 export async function createNote(taskId: string, content: string) {
   const { data: note, error } = await supabase
-    .from("notes")
+    .from('notes')
     .insert({ task_id: taskId, content })
     .select()
     .single();
@@ -616,23 +581,24 @@ export async function createNote(taskId: string, content: string) {
 
 export async function updateNote(id: string, content: string) {
   const { error } = await supabase
-    .from("notes")
+    .from('notes')
     .update({ content, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq('id', id);
   if (error) throw error;
 }
 
 export async function deleteNote(id: string) {
-  const { error } = await supabase.from("notes").delete().eq("id", id);
+  const { error } = await supabase.from('notes').delete().eq('id', id);
   if (error) throw error;
 }
 
 /* -------------------------------------------------------------------------- */
 /*                             TAG & DIVISION CRUD                            */
 /* -------------------------------------------------------------------------- */
+
 export async function createTag(name: string, color: string) {
   const { data, error } = await supabase
-    .from("tags")
+    .from('tags')
     .insert({ name, color, order_index: Date.now() })
     .select()
     .single();
@@ -642,20 +608,20 @@ export async function createTag(name: string, color: string) {
 
 export async function updateTagData(id: string, updates: Partial<Tag>) {
   const { error } = await supabase
-    .from("tags")
+    .from('tags')
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq('id', id);
   if (error) throw error;
 }
 
 export async function deleteTag(id: string) {
-  const { error } = await supabase.from("tags").delete().eq("id", id);
+  const { error } = await supabase.from('tags').delete().eq('id', id);
   if (error) throw error;
 }
 
 export async function createDivision(name: string, color: string) {
   const { data, error } = await supabase
-    .from("divisions")
+    .from('divisions')
     .insert({ name, color, order_index: Date.now() })
     .select()
     .single();
@@ -668,23 +634,24 @@ export async function updateDivisionData(
   updates: Partial<Division>
 ) {
   const { error } = await supabase
-    .from("divisions")
+    .from('divisions')
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq('id', id);
   if (error) throw error;
 }
 
 export async function deleteDivision(id: string) {
-  const { error } = await supabase.from("divisions").delete().eq("id", id);
+  const { error } = await supabase.from('divisions').delete().eq('id', id);
   if (error) throw error;
 }
 
 /* -------------------------------------------------------------------------- */
 /*                                 PEOPLE CRUD                                */
 /* -------------------------------------------------------------------------- */
+
 export async function createPerson(name: string, email?: string) {
   const { data: person, error } = await supabase
-    .from("people")
+    .from('people')
     .insert({ name, email: email || null })
     .select()
     .single();
@@ -698,20 +665,107 @@ export async function updatePersonData(
   updates: { name?: string; email?: string }
 ) {
   const { error } = await supabase
-    .from("people")
+    .from('people')
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq('id', id);
   if (error) throw error;
 }
 
 export async function deletePerson(id: string) {
-  const { error } = await supabase.from("people").delete().eq("id", id);
+  const { error } = await supabase.from('people').delete().eq('id', id);
   if (error) throw error;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                 IDEA CRUD                                  */
+/* -------------------------------------------------------------------------- */
+
+export async function createIdea(data: {
+  title: string;
+  description?: string;
+  attachments?: string[];
+  links?: string[];
+  tag_ids?: string[];
+  submitted_by?: string | null;
+  directed_to?: string | null;
+}) {
+  const orgTag = await getCurrentUserOrgTag();
+
+  const { data: idea, error } = await supabase
+    .from('ideas')
+    .insert({
+      title: data.title,
+      description: data.description || '',
+      attachments: data.attachments || [],
+      links: data.links || [],
+      tag_ids: data.tag_ids || [],
+      submitted_by: data.submitted_by || null,
+      directed_to: data.directed_to || null,
+      organization_tag: orgTag,
+    })
+    .select(
+      `
+      *,
+      tags:idea_tags(tag:tags(*))
+    `
+    )
+    .single();
+
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'idea',
+    entity_id: idea.id,
+    action: 'created',
+    changes: { idea },
+  });
+
+  return {
+    ...idea,
+    tags: idea.tags?.map((t: any) => t.tag) || [],
+  };
+}
+
+export async function updateIdeaData(id: string, updates: Partial<Idea>) {
+  const { error } = await supabase
+    .from('ideas')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+      attachments: updates.attachments || [],
+      links: updates.links || [],
+      tag_ids: updates.tag_ids || [],
+      submitted_by: updates.submitted_by || null,
+      directed_to: updates.directed_to || null,
+    })
+    .eq('id', id);
+
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'idea',
+    entity_id: id,
+    action: 'updated',
+    changes: updates,
+  });
+}
+
+export async function deleteIdea(id: string) {
+  const { error } = await supabase.from('ideas').delete().eq('id', id);
+  if (error) throw error;
+
+  await supabase.from('event_log').insert({
+    entity_type: 'idea',
+    entity_id: id,
+    action: 'deleted',
+    changes: {},
+  });
 }
 
 /* -------------------------------------------------------------------------- */
 /*                                   HELPERS                                  */
 /* -------------------------------------------------------------------------- */
+
 function formatTask(task: any): Task {
   return {
     ...task,
@@ -721,3 +775,4 @@ function formatTask(task: any): Task {
     notes: task.notes || [],
   };
 }
+
