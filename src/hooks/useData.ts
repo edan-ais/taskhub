@@ -11,6 +11,43 @@ import type {
 } from '../lib/types';
 
 /* -------------------------------------------------------------------------- */
+/*                               HELPER FUNCTION                              */
+/* -------------------------------------------------------------------------- */
+export async function getOrgTagForUser(): Promise<string | null> {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    console.warn('⚠️ No user session found.');
+    return null;
+  }
+
+  // Try by user_id first
+  let { data: profile, error } = await supabase
+    .from('profiles')
+    .select('organization_tag, email')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  // Fallback to email if no result
+  if ((!profile || !profile.organization_tag) && user.email) {
+    const { data: emailMatch } = await supabase
+      .from('profiles')
+      .select('organization_tag')
+      .eq('email', user.email)
+      .maybeSingle();
+    profile = emailMatch;
+  }
+
+  if (error) console.warn('Error fetching organization tag:', error.message);
+  console.log('✅ getOrgTagForUser found:', profile?.organization_tag);
+
+  return profile?.organization_tag || null;
+}
+
+/* -------------------------------------------------------------------------- */
 /*                                  useData                                   */
 /* -------------------------------------------------------------------------- */
 export function useData() {
@@ -29,31 +66,9 @@ export function useData() {
 
   /* ----------------------------- FETCH USER TAG ---------------------------- */
   const fetchUserOrgTag = useCallback(async () => {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      console.warn('No user session found.');
-      setUserOrgTag(null);
-      return null;
-    }
-
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('organization_tag')
-      .eq('user_id', user.id)
-      .single();
-
-    if (error) {
-      console.error('Error fetching profile:', error);
-      setUserOrgTag(null);
-      return null;
-    }
-
-    setUserOrgTag(profile?.organization_tag || null);
-    return profile?.organization_tag || null;
+    const tag = await getOrgTagForUser();
+    setUserOrgTag(tag);
+    return tag;
   }, []);
 
   /* --------------------------- TASK DEDUPLICATION -------------------------- */
@@ -96,12 +111,11 @@ export function useData() {
     try {
       const orgTag = userOrgTag || (await fetchUserOrgTag());
       if (!orgTag) {
-        console.warn('No organization tag found. Loading no tasks.');
+        console.warn('⚠️ No organization tag found. Skipping task load.');
         setTasks([]);
         return;
       }
 
-      // Admin orgs get all tasks; others see only their org's
       const isAdminOrg = orgTag === 'WW529400';
       const query = supabase
         .from('tasks')
@@ -128,7 +142,7 @@ export function useData() {
       const uniqueTasks = deduplicateTasks(formattedTasks);
       setTasks(uniqueTasks);
     } catch (err) {
-      console.error('Error fetching tasks:', err);
+      console.error('❌ Error fetching tasks:', err);
     }
   }, [setTasks, userOrgTag, fetchUserOrgTag]);
 
@@ -140,7 +154,7 @@ export function useData() {
       .order('order_index', { ascending: true });
 
     if (error) {
-      console.error('Error fetching divisions:', error);
+      console.error('❌ Error fetching divisions:', error);
       return;
     }
 
@@ -155,7 +169,7 @@ export function useData() {
       .order('order_index', { ascending: true });
 
     if (error) {
-      console.error('Error fetching tags:', error);
+      console.error('❌ Error fetching tags:', error);
       return;
     }
 
@@ -181,7 +195,7 @@ export function useData() {
 
     const { data: ideas, error } = await query;
     if (error) {
-      console.error('Error fetching ideas:', error);
+      console.error('❌ Error fetching ideas:', error);
       return;
     }
 
@@ -201,7 +215,7 @@ export function useData() {
       .order('name', { ascending: true });
 
     if (error) {
-      console.error('Error fetching people:', error);
+      console.error('❌ Error fetching people:', error);
       return;
     }
 
@@ -221,7 +235,7 @@ export function useData() {
       .order('received_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching emails:', error);
+      console.error('❌ Error fetching emails:', error);
       return;
     }
 
@@ -323,17 +337,7 @@ export async function createTask(data: {
   due_date?: string | null;
   order_rank?: number;
 }) {
-  // Fetch user's org tag to attach to task
-  const { data: { user } } = await supabase.auth.getUser();
-  let orgTag = null;
-  if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_tag')
-      .eq('user_id', user.id)
-      .single();
-    orgTag = profile?.organization_tag || null;
-  }
+  const orgTag = await getOrgTagForUser();
 
   const { data: task, error } = await supabase
     .from('tasks')
@@ -639,61 +643,6 @@ export async function deletePerson(id: string) {
 /* -------------------------------------------------------------------------- */
 /*                                 IDEA CRUD                                  */
 /* -------------------------------------------------------------------------- */
-
-export async function createIdea(data: {
-  title: string;
-  description?: string;
-  attachments?: string[];
-  links?: string[];
-  tag_ids?: string[];
-  submitted_by?: string | null;
-  directed_to?: string | null;
-}) {
-  const { data: { user } } = await supabase.auth.getUser();
-  let orgTag = null;
-  if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_tag')
-      .eq('user_id', user.id)
-      .single();
-    orgTag = profile?.organization_tag || null;
-  }
-
-  const { data: idea, error } = await supabase
-    .from('ideas')
-    .insert({
-      title: data.title,
-      description: data.description || '',
-      attachments: data.attachments || [],
-      links: data.links || [],
-      tag_ids: data.tag_ids || [],
-      submitted_by: data.submitted_by || null,
-      directed_to: data.directed_to || null,
-      organization_tag: orgTag,
-    })
-    .select(
-      `
-      *,
-      tags:idea_tags(tag:tags(*))
-    `
-    )
-    .single();
-
-  if (error) throw error;
-
-  await supabase.from('event_log').insert({
-    entity_type: 'idea',
-    entity_id: idea.id,
-    action: 'created',
-    changes: { idea },
-  });
-
-  return {
-    ...idea,
-    tags: idea.tags?.map((t: any) => t.tag) || [],
-  };
-}
 
 export async function updateIdeaData(id: string, updates: Partial<Idea>) {
   const { error } = await supabase
