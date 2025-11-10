@@ -42,15 +42,36 @@ export default function App() {
           .eq('user_id', user.id)
           .single();
 
-        // ✅ Auto-create missing profile so app never hangs
+        // If no profile exists → auto-create
         if (error && error.code === 'PGRST116') {
-          await supabase.from('profiles').insert({
+          const isAdmin = user.email === 'edanharrofficial@gmail.com';
+          const { error: insertError } = await supabase.from('profiles').insert({
             user_id: user.id,
-            approved: false,
+            email: user.email,
+            approved: isAdmin,
+            organization_tag: isAdmin ? 'WW529400' : null,
           });
-          setApproved(false);
+          if (insertError) console.error('Error creating profile:', insertError);
+          setApproved(isAdmin ? true : false);
         } else {
-          setApproved(data?.approved ?? false);
+          // If profile exists → verify/update admin info
+          if (user.email === 'edanharrofficial@gmail.com') {
+            if (
+              data?.organization_tag !== 'WW529400' ||
+              data?.approved !== true
+            ) {
+              await supabase
+                .from('profiles')
+                .update({
+                  organization_tag: 'WW529400',
+                  approved: true,
+                })
+                .eq('user_id', user.id);
+            }
+            setApproved(true);
+          } else {
+            setApproved(data?.approved ?? false);
+          }
         }
       } catch (err) {
         console.error('Error loading/creating profile:', err);
@@ -93,8 +114,8 @@ export default function App() {
           Awaiting Account Approval
         </h2>
         <p className="text-slate-600 text-sm text-center max-w-sm">
-          Your profile has been created and is awaiting admin verification. You’ll gain access
-          once your organization tag has been assigned.
+          Your profile has been created and is awaiting admin verification. You’ll gain
+          access once your organization tag has been assigned.
         </p>
       </div>
     );
@@ -106,16 +127,21 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Navigation />
+
       <main className="pt-20 pb-24 px-4 md:px-6 lg:px-8 max-w-[1920px] mx-auto">
+        {/* Render tabs */}
         {activeTab === 'home' && <HomeTab />}
         {activeTab === 'people' && <PeopleTab />}
         {activeTab === 'tags' && <TagsTab />}
         {activeTab === 'calendar' && <CalendarTab />}
         {activeTab === 'ideas' && <IdeasTab />}
         {activeTab === 'analytics' && <AnalyticsTab />}
+
+        {/* Admin Dashboard (only for you) */}
         {activeTab === 'admin' &&
           user?.email === 'edanharrofficial@gmail.com' && <AdminDashboard />}
       </main>
+
       <BottomNavigation />
     </div>
   );
