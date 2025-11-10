@@ -23,7 +23,7 @@ export function Navigation() {
   const [orgTag, setOrgTag] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  /* --------------------------- REFRESH DATA -------------------------- */
+  /* --------------------------- HANDLE DATA REFRESH -------------------------- */
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([
@@ -37,32 +37,50 @@ export function Navigation() {
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
-  /* ----------------------- FETCH USER ORG TAG ------------------------ */
-  const loadOrgTag = async (uid?: string) => {
-    if (!uid) return;
-    const { data, error } = await supabase
+  /* ------------------------------ LOAD PROFILE ------------------------------ */
+  const loadOrgTag = async (uid?: string, email?: string) => {
+    if (!uid && !email) return;
+
+    // Try user_id first
+    let { data, error } = await supabase
       .from('profiles')
       .select('organization_tag')
-      .eq('user_id', uid)
-      .single();
+      .eq('user_id', uid || '')
+      .maybeSingle();
+
+    // Fallback: try by email if not found
+    if ((!data || !data.organization_tag) && email) {
+      const { data: fallback } = await supabase
+        .from('profiles')
+        .select('organization_tag')
+        .eq('email', email)
+        .maybeSingle();
+      data = fallback;
+    }
+
     if (error) console.warn('Error fetching organization tag:', error.message);
+    console.log('Loaded org tag:', data?.organization_tag);
     setOrgTag(data?.organization_tag || null);
   };
 
+  /* -------------------------- INITIAL FETCH -------------------------- */
   useEffect(() => {
-    if (user?.id) loadOrgTag(user.id);
+    if (user?.id) {
+      const timeout = setTimeout(() => loadOrgTag(user.id, user.email), 300);
+      return () => clearTimeout(timeout);
+    }
   }, [user]);
 
-  // Also refetch on auth state changes (e.g. refresh)
+  /* ------------------- AUTH STATE LISTENER (auto reload) ------------------- */
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) loadOrgTag(session.user.id);
+      if (session?.user) loadOrgTag(session.user.id, session.user.email);
       else setOrgTag(null);
     });
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  /* -------------------------- CLOSE DROPDOWN -------------------------- */
+  /* -------------------------- CLOSE DROPDOWN ON CLICK ----------------------- */
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -73,10 +91,11 @@ export function Navigation() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  /* -------------------------- RENDER NAVIGATION ----------------------------- */
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b-2 border-slate-200 shadow-sm">
       <div className="max-w-[1920px] mx-auto px-4 md:px-6 lg:px-8">
-        {/* HEADER ROW */}
+        {/* DESKTOP ROW */}
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center gap-2">
@@ -84,9 +103,9 @@ export function Navigation() {
             <h1 className="text-2xl font-bold text-slate-800">TaskHUB</h1>
           </div>
 
-          {/* Right side actions */}
+          {/* Right section */}
           <div className="flex items-center space-x-3">
-            {/* Refresh */}
+            {/* Refresh button */}
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}
@@ -113,7 +132,7 @@ export function Navigation() {
               </span>
             </button>
 
-            {/* Search */}
+            {/* Search (Desktop) */}
             <div className="relative hidden md:block">
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -128,7 +147,7 @@ export function Navigation() {
               />
             </div>
 
-            {/* Profile */}
+            {/* Profile Button */}
             {user && (
               <div className="relative" ref={dropdownRef}>
                 <button
@@ -142,12 +161,15 @@ export function Navigation() {
                   </span>
                 </button>
 
+                {/* Dropdown */}
                 {showProfile && (
                   <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-lg p-4 z-50">
                     <h3 className="font-semibold text-slate-800 text-sm mb-1">
                       Signed in as
                     </h3>
-                    <p className="text-slate-600 text-sm mb-2 truncate">{user.email}</p>
+                    <p className="text-slate-600 text-sm mb-2 truncate">
+                      {user.email}
+                    </p>
 
                     <div className="mb-4">
                       <p className="text-xs font-medium text-slate-500">
@@ -175,7 +197,7 @@ export function Navigation() {
           </div>
         </div>
 
-        {/* MOBILE SEARCH */}
+        {/* MOBILE SEARCH ROW */}
         <div className="md:hidden pb-3">
           <div className="relative w-full">
             <Search
