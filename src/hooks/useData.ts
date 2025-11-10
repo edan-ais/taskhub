@@ -11,52 +11,6 @@ import type {
 } from '../lib/types';
 
 /* -------------------------------------------------------------------------- */
-/*                     SHARED ORG TAG HELPER (ADDED)                          */
-/* -------------------------------------------------------------------------- */
-/**
- * Try to get the current user's organization_tag.
- * 1) by user_id
- * 2) fall back to email (helps if we created rows manually)
- */
-async function getCurrentUserOrgTag(): Promise<string | null> {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    console.warn('No user session found.');
-    return null;
-  }
-
-  // try by user_id
-  const { data: profileById } = await supabase
-    .from('profiles')
-    .select('organization_tag')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (profileById?.organization_tag) {
-    return profileById.organization_tag;
-  }
-
-  // fallback by email
-  if (user.email) {
-    const { data: profileByEmail } = await supabase
-      .from('profiles')
-      .select('organization_tag')
-      .eq('email', user.email)
-      .maybeSingle();
-
-    if (profileByEmail?.organization_tag) {
-      return profileByEmail.organization_tag;
-    }
-  }
-
-  return null;
-}
-
-/* -------------------------------------------------------------------------- */
 /*                                  useData                                   */
 /* -------------------------------------------------------------------------- */
 export function useData() {
@@ -75,9 +29,31 @@ export function useData() {
 
   /* ----------------------------- FETCH USER TAG ---------------------------- */
   const fetchUserOrgTag = useCallback(async () => {
-    const tag = await getCurrentUserOrgTag();
-    setUserOrgTag(tag);
-    return tag;
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      console.warn('No user session found.');
+      setUserOrgTag(null);
+      return null;
+    }
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('organization_tag')
+      .eq('user_id', user.id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching profile:', error);
+      setUserOrgTag(null);
+      return null;
+    }
+
+    setUserOrgTag(profile?.organization_tag || null);
+    return profile?.organization_tag || null;
   }, []);
 
   /* --------------------------- TASK DEDUPLICATION -------------------------- */
@@ -85,7 +61,6 @@ export function useData() {
     const uniqueMap = new Map<string, Task>();
 
     for (const task of tasks) {
-      // normalize title/description to avoid tiny differences
       const key = `${task.title?.trim().toLowerCase() || ''}|${
         task.description?.trim().toLowerCase() || ''
       }`;
@@ -95,7 +70,6 @@ export function useData() {
       if (!existing) {
         uniqueMap.set(key, task);
       } else {
-        // pick the richer one (more related elements)
         const currentScore =
           (existing.tags?.length || 0) +
           (existing.divisions?.length || 0) +
@@ -121,48 +95,37 @@ export function useData() {
   const fetchTasks = useCallback(async () => {
     try {
       const orgTag = userOrgTag || (await fetchUserOrgTag());
-
       if (!orgTag) {
         console.warn('No organization tag found. Loading no tasks.');
         setTasks([]);
         return;
       }
 
-      // admin org gets all tasks
+      // Admin orgs get all tasks; others see only their org's
       const isAdminOrg = orgTag === 'WW529400';
-
       const query = supabase
         .from('tasks')
         .select(
           `
-        *,
-        tags:task_tags(tag:tags(*)),
-        divisions:task_divisions(division:divisions(*)),
-        subtasks(*),
-        notes(*)
-      `
+          *,
+          tags:task_tags(tag:tags(*)),
+          divisions:task_divisions(division:divisions(*)),
+          subtasks(*),
+          notes(*)
+        `
         )
         .order('order_rank', { ascending: true });
 
-      if (!isAdminOrg) {
-        query.eq('organization_tag', orgTag);
-      }
+      if (!isAdminOrg) query.eq('organization_tag', orgTag);
 
       const { data: tasks, error } = await query;
+      if (error) throw error;
 
-      if (error) {
-        console.error('Error fetching tasks:', error);
-        return;
-      }
-
-      // format each to have tags/divisions flattened
       const formattedTasks: Task[] = (tasks || []).map((task: any) =>
         formatTask(task)
       );
 
-      // remove dupes caused by slow saves
       const uniqueTasks = deduplicateTasks(formattedTasks);
-
       setTasks(uniqueTasks);
     } catch (err) {
       console.error('Error fetching tasks:', err);
@@ -204,7 +167,7 @@ export function useData() {
     const orgTag = userOrgTag || (await fetchUserOrgTag());
     const isAdminOrg = orgTag === 'WW529400';
 
-    const query = await supabase
+    const query = supabase
       .from('ideas')
       .select(
         `
@@ -214,12 +177,9 @@ export function useData() {
       )
       .order('created_at', { ascending: false });
 
-    if (!isAdminOrg) {
-      query.eq('organization_tag', orgTag);
-    }
+    if (!isAdminOrg) query.eq('organization_tag', orgTag);
 
     const { data: ideas, error } = await query;
-
     if (error) {
       console.error('Error fetching ideas:', error);
       return;
@@ -291,18 +251,9 @@ export function useData() {
 
     loadAllData();
 
-    // tasks + related tables
     const tasksChannel = supabase
       .channel('tasks-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, fetchTasks)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, fetchTasks)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
-        removeTask(payload.old.id);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'subtasks' }, fetchTasks)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, fetchTasks)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_tags' }, fetchTasks)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_divisions' }, fetchTasks)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, fetchTasks)
       .subscribe();
 
     const tagsChannel = supabase
@@ -373,7 +324,16 @@ export async function createTask(data: {
   order_rank?: number;
 }) {
   // Fetch user's org tag to attach to task
-  const orgTag = await getCurrentUserOrgTag();
+  const { data: { user } } = await supabase.auth.getUser();
+  let orgTag = null;
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_tag')
+      .eq('user_id', user.id)
+      .single();
+    orgTag = profile?.organization_tag || null;
+  }
 
   const { data: task, error } = await supabase
     .from('tasks')
@@ -689,7 +649,16 @@ export async function createIdea(data: {
   submitted_by?: string | null;
   directed_to?: string | null;
 }) {
-  const orgTag = await getCurrentUserOrgTag();
+  const { data: { user } } = await supabase.auth.getUser();
+  let orgTag = null;
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_tag')
+      .eq('user_id', user.id)
+      .single();
+    orgTag = profile?.organization_tag || null;
+  }
 
   const { data: idea, error } = await supabase
     .from('ideas')
@@ -775,4 +744,3 @@ function formatTask(task: any): Task {
     notes: task.notes || [],
   };
 }
-
