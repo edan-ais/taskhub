@@ -8,6 +8,7 @@ import AdminDashboard from './components/AdminDashboard';
 import { useAppStore } from './lib/store';
 import { useData } from './hooks/useData';
 import { LoadingSpinner } from './components/LoadingSpinner';
+import { TaskDrawer } from './components/TaskDrawer'; // 🧩 added global drawer import
 
 // Tabs
 import { HomeTab } from './components/tabs/HomeTab';
@@ -143,6 +144,9 @@ export default function App() {
       </main>
 
       <BottomNavigation />
+
+      {/* 🪟 Global Task Drawer (works across all tabs) */}
+      <TaskDrawer />
     </div>
   );
 }
