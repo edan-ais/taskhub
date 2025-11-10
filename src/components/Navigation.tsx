@@ -1,13 +1,29 @@
-import { Search, EyeOff, Eye, CheckCircle2, RefreshCw } from 'lucide-react';
+import {
+  Search,
+  EyeOff,
+  Eye,
+  CheckCircle2,
+  RefreshCw,
+  UserCircle2,
+  LogOut,
+} from 'lucide-react';
 import { useAppStore } from '../lib/store';
 import { useData } from '../hooks/useData';
-import { useState } from 'react';
+import { useAuth } from '../hooks/useAuth';
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '../lib/supabase';
 
 export function Navigation() {
   const { searchQuery, setSearchQuery, hideCompleted, setHideCompleted } = useAppStore();
   const { fetchTasks, fetchDivisions, fetchTags, fetchIdeas, fetchPeople, fetchEmails } = useData();
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { user, signOut } = useAuth();
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [orgTag, setOrgTag] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  /* --------------------------- HANDLE DATA REFRESH -------------------------- */
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([
@@ -16,23 +32,48 @@ export function Navigation() {
       fetchTags(),
       fetchIdeas(),
       fetchPeople(),
-      fetchEmails()
+      fetchEmails(),
     ]);
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
+  /* ------------------------------ LOAD PROFILE ------------------------------ */
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('organization_tag')
+        .eq('user_id', user.id)
+        .single();
+      setOrgTag(data?.organization_tag || '');
+    };
+    loadProfile();
+  }, [user]);
+
+  /* -------------------------- CLOSE DROPDOWN ON CLICK ----------------------- */
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowProfile(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b-2 border-slate-200 shadow-sm">
       <div className="max-w-[1920px] mx-auto px-4 md:px-6 lg:px-8">
-        {/* ORIGINAL DESKTOP ROW — unchanged */}
+        {/* DESKTOP ROW */}
         <div className="flex items-center justify-between h-16">
-          {/* logo */}
+          {/* Logo */}
           <div className="flex items-center gap-2">
             <CheckCircle2 size={28} className="text-blue-600" />
             <h1 className="text-2xl font-bold text-slate-800">TaskHUB</h1>
           </div>
 
-          {/* right section: buttons + desktop search */}
+          {/* Right section */}
           <div className="flex items-center space-x-3">
             <button
               onClick={handleRefresh}
@@ -59,7 +100,7 @@ export function Navigation() {
               </span>
             </button>
 
-            {/* DESKTOP SEARCH — stays inline */}
+            {/* Search (Desktop) */}
             <div className="relative hidden md:block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input
@@ -70,10 +111,49 @@ export function Navigation() {
                 className="pl-10 pr-4 h-10 rounded-lg bg-white border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all w-64"
               />
             </div>
+
+            {/* Profile Button */}
+            {user && (
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setShowProfile(!showProfile)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-slate-300 bg-white hover:bg-slate-50 transition-all"
+                  title="Profile"
+                >
+                  <UserCircle2 size={20} className="text-slate-700" />
+                  <span className="hidden md:inline text-sm font-medium text-slate-700">
+                    Profile
+                  </span>
+                </button>
+
+                {showProfile && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-lg p-4 z-50">
+                    <h3 className="font-semibold text-slate-800 text-sm mb-1">Signed in as</h3>
+                    <p className="text-slate-600 text-sm mb-2 truncate">{user.email}</p>
+
+                    <div className="mb-4">
+                      <p className="text-xs font-medium text-slate-500">Organization Tag</p>
+                      <p className="text-sm font-semibold text-blue-600">{orgTag || '—'}</p>
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        setShowProfile(false);
+                        await signOut();
+                      }}
+                      className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-all"
+                    >
+                      <LogOut size={16} />
+                      <span className="text-sm font-medium">Log out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* MOBILE SEARCH ROW — only shows below on small screens */}
+        {/* MOBILE SEARCH ROW */}
         <div className="md:hidden pb-3">
           <div className="relative w-full">
             <Search
