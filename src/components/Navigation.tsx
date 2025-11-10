@@ -20,10 +20,10 @@ export function Navigation() {
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [orgTag, setOrgTag] = useState('');
+  const [orgTag, setOrgTag] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  /* --------------------------- HANDLE DATA REFRESH -------------------------- */
+  /* --------------------------- REFRESH DATA -------------------------- */
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([
@@ -37,21 +37,32 @@ export function Navigation() {
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
-  /* ------------------------------ LOAD PROFILE ------------------------------ */
+  /* ----------------------- FETCH USER ORG TAG ------------------------ */
+  const loadOrgTag = async (uid?: string) => {
+    if (!uid) return;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('organization_tag')
+      .eq('user_id', uid)
+      .single();
+    if (error) console.warn('Error fetching organization tag:', error.message);
+    setOrgTag(data?.organization_tag || null);
+  };
+
   useEffect(() => {
-    const loadProfile = async () => {
-      if (!user) return;
-      const { data } = await supabase
-        .from('profiles')
-        .select('organization_tag')
-        .eq('user_id', user.id)
-        .single();
-      setOrgTag(data?.organization_tag || '');
-    };
-    loadProfile();
+    if (user?.id) loadOrgTag(user.id);
   }, [user]);
 
-  /* -------------------------- CLOSE DROPDOWN ON CLICK ----------------------- */
+  // Also refetch on auth state changes (e.g. refresh)
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) loadOrgTag(session.user.id);
+      else setOrgTag(null);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  /* -------------------------- CLOSE DROPDOWN -------------------------- */
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -65,7 +76,7 @@ export function Navigation() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b-2 border-slate-200 shadow-sm">
       <div className="max-w-[1920px] mx-auto px-4 md:px-6 lg:px-8">
-        {/* DESKTOP ROW */}
+        {/* HEADER ROW */}
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center gap-2">
@@ -73,8 +84,9 @@ export function Navigation() {
             <h1 className="text-2xl font-bold text-slate-800">TaskHUB</h1>
           </div>
 
-          {/* Right section */}
+          {/* Right side actions */}
           <div className="flex items-center space-x-3">
+            {/* Refresh */}
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}
@@ -85,6 +97,7 @@ export function Navigation() {
               <span className="hidden md:inline text-sm font-medium">Refresh</span>
             </button>
 
+            {/* Hide Completed */}
             <button
               onClick={() => setHideCompleted(!hideCompleted)}
               className={`flex items-center gap-2 px-4 h-10 rounded-lg border-2 transition-all ${
@@ -100,9 +113,12 @@ export function Navigation() {
               </span>
             </button>
 
-            {/* Search (Desktop) */}
+            {/* Search */}
             <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                size={18}
+              />
               <input
                 type="text"
                 placeholder="Search tasks..."
@@ -112,7 +128,7 @@ export function Navigation() {
               />
             </div>
 
-            {/* Profile Button */}
+            {/* Profile */}
             {user && (
               <div className="relative" ref={dropdownRef}>
                 <button
@@ -128,12 +144,18 @@ export function Navigation() {
 
                 {showProfile && (
                   <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-lg p-4 z-50">
-                    <h3 className="font-semibold text-slate-800 text-sm mb-1">Signed in as</h3>
+                    <h3 className="font-semibold text-slate-800 text-sm mb-1">
+                      Signed in as
+                    </h3>
                     <p className="text-slate-600 text-sm mb-2 truncate">{user.email}</p>
 
                     <div className="mb-4">
-                      <p className="text-xs font-medium text-slate-500">Organization Tag</p>
-                      <p className="text-sm font-semibold text-blue-600">{orgTag || '—'}</p>
+                      <p className="text-xs font-medium text-slate-500">
+                        Organization Tag
+                      </p>
+                      <p className="text-sm font-semibold text-blue-600">
+                        {orgTag || '—'}
+                      </p>
                     </div>
 
                     <button
@@ -153,7 +175,7 @@ export function Navigation() {
           </div>
         </div>
 
-        {/* MOBILE SEARCH ROW */}
+        {/* MOBILE SEARCH */}
         <div className="md:hidden pb-3">
           <div className="relative w-full">
             <Search
