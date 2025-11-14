@@ -41,7 +41,6 @@ import {
 } from '../hooks/useData';
 import type {
   ProgressState,
-  Subtask,
   Tag as TagType,
   Division,
 } from '../lib/types';
@@ -123,24 +122,30 @@ export function TaskDrawer() {
   // tenancy bootstrap
   useEffect(() => {
     (async () => {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
-      if (error || !user) {
+      try {
+        const {
+          data: { user },
+          error,
+        } = await supabase.auth.getUser();
+        if (error || !user) {
+          setUserOrgTag(null);
+          setIsAdmin(false);
+          return;
+        }
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('organization_tag')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        const org = profile?.organization_tag || null;
+        setUserOrgTag(org);
+        setIsAdmin(org === ADMIN_ORG_TAG);
+      } catch (err) {
+        console.error('Auth bootstrap failed:', err);
         setUserOrgTag(null);
         setIsAdmin(false);
-        return;
       }
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('organization_tag')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      const org = profile?.organization_tag || null;
-      setUserOrgTag(org);
-      setIsAdmin(org === ADMIN_ORG_TAG);
     })();
   }, []);
 
@@ -153,6 +158,25 @@ export function TaskDrawer() {
     }
   }, [selectedTask?.id, isNewTask]);
 
+  // React 310 guard: keep hooks order stable and avoid null field access.
+  const safeSelectedTask = selectedTask ?? ({
+    id: 'temp-null',
+    title: '',
+    description: '',
+    lane: 'red',
+    assignee: '',
+    due_date: '',
+    order_rank: 0,
+    tags: [],
+    divisions: [],
+    subtasks: [],
+    links: [],
+    files: [],
+    notes: [],
+    progress_state: 'not_started',
+  } as any);
+
+  // If no real task, render nothing (portal stays fine)
   if (!selectedTask) return null;
 
   const handleClose = () => {
@@ -173,11 +197,15 @@ export function TaskDrawer() {
   };
 
   const handleUpdate = async (updates: any) => {
-    if (isNewTask) {
-      updateTask(selectedTask.id, updates);
-    } else {
-      await updateTaskData(selectedTask.id, updates);
-      updateTask(selectedTask.id, updates);
+    try {
+      if (isNewTask) {
+        updateTask(safeSelectedTask.id, updates);
+      } else {
+        await updateTaskData(safeSelectedTask.id, updates);
+        updateTask(safeSelectedTask.id, updates);
+      }
+    } catch (e) {
+      console.error('handleUpdate failed:', e);
     }
   };
 
@@ -194,18 +222,18 @@ export function TaskDrawer() {
         if (tag) setTempTags([...tempTags, tag]);
       }
     } else {
-      const hasTag = selectedTask.tags?.some((t) => t.id === tagId);
+      const hasTag = safeSelectedTask.tags?.some((t: any) => t.id === tagId);
       if (hasTag) {
-        await removeTagFromTask(selectedTask.id, tagId);
-        updateTask(selectedTask.id, {
-          tags: selectedTask.tags?.filter((t) => t.id !== tagId),
+        await removeTagFromTask(safeSelectedTask.id, tagId);
+        updateTask(safeSelectedTask.id, {
+          tags: safeSelectedTask.tags?.filter((t: any) => t.id !== tagId),
         });
       } else {
-        await addTagToTask(selectedTask.id, tagId);
+        await addTagToTask(safeSelectedTask.id, tagId);
         const tag = tags.find((t) => t.id === tagId);
         if (tag) {
-          updateTask(selectedTask.id, {
-            tags: [...(selectedTask.tags || []), tag],
+          updateTask(safeSelectedTask.id, {
+            tags: [...(safeSelectedTask.tags || []), tag],
           });
         }
       }
@@ -234,8 +262,6 @@ export function TaskDrawer() {
   /* -----------------------------------------------------------------------------
      DIVISIONS (org-scoped)
   -----------------------------------------------------------------------------*/
-
-  // Non-admin users can only see their org's divisions. Admin sees all.
   const filteredDivisions = useMemo<Division[]>(() => {
     if (isAdmin) return divisions;
     if (!userOrgTag) return [];
@@ -244,10 +270,8 @@ export function TaskDrawer() {
 
   const handleToggleDivision = async (divisionId: string) => {
     if (!isAdmin) {
-      // Guard client-side: prevent selecting divisions from other orgs
       const div = divisions.find((d) => d.id === divisionId);
       if (div && div.organization_tag !== userOrgTag) {
-        // silently ignore / or show toast
         console.warn('Blocked: cannot tag another organization division.');
         return;
       }
@@ -262,30 +286,28 @@ export function TaskDrawer() {
         if (division) setTempDivisions([...tempDivisions, division]);
       }
     } else {
-      const hasDivision = selectedTask.divisions?.some((d) => d.id === divisionId);
+      const hasDivision = safeSelectedTask.divisions?.some((d: any) => d.id === divisionId);
       if (hasDivision) {
-        await removeDivisionFromTask(selectedTask.id, divisionId);
-        updateTask(selectedTask.id, {
-          divisions: selectedTask.divisions?.filter((d) => d.id !== divisionId),
+        await removeDivisionFromTask(safeSelectedTask.id, divisionId);
+        updateTask(safeSelectedTask.id, {
+          divisions: safeSelectedTask.divisions?.filter((d: any) => d.id !== divisionId),
         });
       } else {
         try {
-          await addDivisionToTask(selectedTask.id, divisionId);
+          await addDivisionToTask(safeSelectedTask.id, divisionId);
           const division = divisions.find((d) => d.id === divisionId);
           if (division) {
-            updateTask(selectedTask.id, {
-              divisions: [...(selectedTask.divisions || []), division],
+            updateTask(safeSelectedTask.id, {
+              divisions: [...(safeSelectedTask.divisions || []), division],
             });
           }
         } catch (err) {
           console.error(err);
-          // addDivisionToTask enforces server-side check for non-admins
         }
       }
     }
   };
 
-  // Division creation (restrict to admin; org users generally shouldn’t mint divisions)
   const handleCreateDivision = async () => {
     if (!isAdmin) {
       alert('Only admins can create new divisions.');
@@ -298,7 +320,6 @@ export function TaskDrawer() {
         .insert({
           name: newDivisionName,
           color: newDivisionColor,
-          // creating a free-floating division; you will then attach an org via admin panel if desired
           order_index: Date.now(),
         })
         .select()
@@ -317,11 +338,11 @@ export function TaskDrawer() {
   /* -----------------------------------------------------------------------------
      DISPLAY SHORTHANDS
   -----------------------------------------------------------------------------*/
-  const displayTags = isNewTask ? tempTags : selectedTask.tags || [];
-  const displayDivisions = isNewTask ? tempDivisions : selectedTask.divisions || [];
-  const displaySubtasks = isNewTask ? tempSubtasks : selectedTask.subtasks || [];
-  const displayLinks = isNewTask ? tempLinks : selectedTask.links || [];
-  const displayFiles: UploadedFile[] = selectedTask.files || [];
+  const displayTags = isNewTask ? tempTags : safeSelectedTask.tags || [];
+  const displayDivisions = isNewTask ? tempDivisions : safeSelectedTask.divisions || [];
+  const displaySubtasks = isNewTask ? tempSubtasks : safeSelectedTask.subtasks || [];
+  const displayLinks = isNewTask ? tempLinks : safeSelectedTask.links || [];
+  const displayFiles: UploadedFile[] = safeSelectedTask.files || [];
 
   /* -----------------------------------------------------------------------------
      SUBTASKS
@@ -337,16 +358,16 @@ export function TaskDrawer() {
       ]);
       setNewSubtask('');
     } else {
-      const maxOrderRank = selectedTask.subtasks?.length
-        ? Math.max(...selectedTask.subtasks.map((st: any) => st.order_rank || 0))
+      const maxOrderRank = safeSelectedTask.subtasks?.length
+        ? Math.max(...safeSelectedTask.subtasks.map((st: any) => st.order_rank || 0))
         : 0;
       const subtask = await createSubtask(
-        selectedTask.id,
+        safeSelectedTask.id,
         newSubtask,
         maxOrderRank + 1000
       );
-      updateTask(selectedTask.id, {
-        subtasks: [...(selectedTask.subtasks || []), subtask],
+      updateTask(safeSelectedTask.id, {
+        subtasks: [...(safeSelectedTask.subtasks || []), subtask],
       });
       setNewSubtask('');
     }
@@ -359,8 +380,8 @@ export function TaskDrawer() {
       );
     } else {
       await updateSubtask(id, updates);
-      updateTask(selectedTask.id, {
-        subtasks: selectedTask.subtasks?.map((st: any) =>
+      updateTask(safeSelectedTask.id, {
+        subtasks: safeSelectedTask.subtasks?.map((st: any) =>
           st.id === id ? { ...st, ...updates } : st
         ),
       });
@@ -374,8 +395,8 @@ export function TaskDrawer() {
       setTempSubtasks(tempSubtasks.filter((st) => st.id !== id));
     } else {
       await deleteSubtask(id);
-      updateTask(selectedTask.id, {
-        subtasks: selectedTask.subtasks?.filter((st: any) => st.id !== id),
+      updateTask(safeSelectedTask.id, {
+        subtasks: safeSelectedTask.subtasks?.filter((st: any) => st.id !== id),
       });
     }
   };
@@ -385,17 +406,17 @@ export function TaskDrawer() {
   -----------------------------------------------------------------------------*/
   const handleAddNote = async () => {
     if (!newNote.trim() || isNewTask) return;
-    const note = await createNote(selectedTask.id, newNote);
-    updateTask(selectedTask.id, {
-      notes: [...(selectedTask.notes || []), note],
+    const note = await createNote(safeSelectedTask.id, newNote);
+    updateTask(safeSelectedTask.id, {
+      notes: [...(safeSelectedTask.notes || []), note],
     });
     setNewNote('');
   };
 
   const handleUpdateNote = async (id: string, content: string) => {
     await updateNote(id, content);
-    updateTask(selectedTask.id, {
-      notes: selectedTask.notes?.map((n: any) =>
+    updateTask(safeSelectedTask.id, {
+      notes: safeSelectedTask.notes?.map((n: any) =>
         n.id === id ? { ...n, content } : n
       ),
     });
@@ -403,8 +424,8 @@ export function TaskDrawer() {
 
   const handleDeleteNote = async (id: string) => {
     await deleteNote(id);
-    updateTask(selectedTask.id, {
-      notes: selectedTask.notes?.filter((n: any) => n.id !== id),
+    updateTask(safeSelectedTask.id, {
+      notes: safeSelectedTask.notes?.filter((n: any) => n.id !== id),
     });
   };
 
@@ -418,7 +439,7 @@ export function TaskDrawer() {
     if (isNewTask) {
       setTempLinks([...tempLinks, newLink]);
     } else {
-      const updated = [...(selectedTask.links || []), newLink];
+      const updated = [...(safeSelectedTask.links || []), newLink];
       await handleUpdate({ links: updated });
     }
 
@@ -430,7 +451,7 @@ export function TaskDrawer() {
     if (isNewTask) {
       setTempLinks(tempLinks.filter((_, i) => i !== idx));
     } else {
-      const updated = (selectedTask.links || []).filter((_, i) => i !== idx);
+      const updated = (safeSelectedTask.links || []).filter((_, i) => i !== idx);
       await handleUpdate({ links: updated });
     }
   };
@@ -447,11 +468,11 @@ export function TaskDrawer() {
     }
 
     setUploadingFiles(true);
-    const currentFiles: UploadedFile[] = selectedTask.files || [];
+    const currentFiles: UploadedFile[] = safeSelectedTask.files || [];
     const uploadedFiles: UploadedFile[] = [...currentFiles];
 
     for (const file of Array.from(files)) {
-      const path = `${selectedTask.id}/${Date.now()}-${file.name}`;
+      const path = `${safeSelectedTask.id}/${Date.now()}-${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from('task-files')
         .upload(path, file);
@@ -477,12 +498,12 @@ export function TaskDrawer() {
   const handleSaveTask = async () => {
     try {
       const newTask = await createTask({
-        title: selectedTask.title || 'New Task',
-        description: selectedTask.description,
-        lane: selectedTask.lane,
-        assignee: selectedTask.assignee,
-        due_date: selectedTask.due_date,
-        order_rank: selectedTask.order_rank,
+        title: safeSelectedTask.title || 'New Task',
+        description: safeSelectedTask.description,
+        lane: safeSelectedTask.lane,
+        assignee: safeSelectedTask.assignee,
+        due_date: safeSelectedTask.due_date,
+        order_rank: safeSelectedTask.order_rank,
       });
 
       // Regular tags (UI tags)
@@ -511,7 +532,7 @@ export function TaskDrawer() {
         });
       }
 
-      removeTask(selectedTask.id);
+      removeTask(safeSelectedTask.id);
       handleClose();
     } catch (error) {
       console.error('Error creating task:', error);
@@ -520,7 +541,7 @@ export function TaskDrawer() {
 
   const handleDeleteTask = async () => {
     if (isNewTask) {
-      removeTask(selectedTask.id);
+      removeTask(safeSelectedTask.id);
       handleClose();
       return;
     }
@@ -529,7 +550,7 @@ export function TaskDrawer() {
       'Delete Task',
       'Are you sure you want to delete this task? This action cannot be undone.',
       async () => {
-        const taskId = selectedTask.id;
+        const taskId = safeSelectedTask.id;
         handleClose();
         removeTask(taskId);
         try {
@@ -543,11 +564,11 @@ export function TaskDrawer() {
 
   /* -----------------------------------------------------------------------------
      ADMIN: Organization ↔ Division linking tool
-     - Rule you specified:
+     - Rule:
        • If orgName equals an existing division name (e.g., "Hubbalicious"),
-         we create a new organization_tag and LINK it to that EXISTING division.
+         mint a new organization_tag and LINK it to that EXISTING division.
        • If orgName is a new name (e.g., "Hubbalicious Sweet Shoppe"),
-         we create a NEW division with that name and then link a brand new
+         create a NEW division with that name and then link a brand new
          organization_tag to that new division.
   -----------------------------------------------------------------------------*/
   const handleAdminAddOrgForDivision = async () => {
@@ -561,7 +582,6 @@ export function TaskDrawer() {
     setAdminInfo('');
 
     try {
-      // Does a division by this exact name already exist?
       const existingDivision = divisions.find(
         (d) => d.name.trim().toLowerCase() === name.toLowerCase()
       );
@@ -569,15 +589,13 @@ export function TaskDrawer() {
       let divisionIdToLink = adminTargetDivisionId || '';
 
       if (existingDivision) {
-        // Use the existing division with the same name
         divisionIdToLink = existingDivision.id;
       } else if (!divisionIdToLink) {
-        // Create a brand new division using the provided name
         const { data: newDiv, error: divErr } = await supabase
           .from('divisions')
           .insert({
             name,
-            color: '#0ea5e9', // default cyan-ish; admin can recolor later
+            color: '#0ea5e9',
             order_index: Date.now(),
           })
           .select()
@@ -589,12 +607,11 @@ export function TaskDrawer() {
       }
 
       if (!divisionIdToLink) {
-        setAdminInfo('Select a division to link or enter a new org name that matches an existing division.');
+        setAdminInfo('Select a division to link or enter a same-name org.');
         setAdminBusy(false);
         return;
       }
 
-      // Mint a new org tag and link it to the chosen division
       const { organization_tag } = await createOrganizationAndLinkToDivision(
         name,
         divisionIdToLink
@@ -637,7 +654,7 @@ export function TaskDrawer() {
               <div className="flex-1">
                 <input
                   type="text"
-                  value={selectedTask.title}
+                  value={safeSelectedTask.title ?? ''}
                   onChange={(e) => handleUpdate({ title: e.target.value })}
                   className="w-full bg-transparent text-2xl font-bold outline-none placeholder-white/70"
                   placeholder="Task title"
@@ -671,7 +688,7 @@ export function TaskDrawer() {
                 Description
               </label>
               <textarea
-                value={selectedTask.description}
+                value={safeSelectedTask.description ?? ''}
                 onChange={(e) => handleUpdate({ description: e.target.value })}
                 className="w-full px-4 py-3 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 rows={4}
@@ -689,7 +706,7 @@ export function TaskDrawer() {
                 </label>
                 {!showAssigneeInput ? (
                   <select
-                    value={selectedTask.assignee || ''}
+                    value={safeSelectedTask.assignee || ''}
                     onChange={(e) => {
                       if (e.target.value === '__new__') {
                         setShowAssigneeInput(true);
@@ -760,7 +777,7 @@ export function TaskDrawer() {
                 </label>
                 <input
                   type="date"
-                  value={selectedTask.due_date || ''}
+                  value={(safeSelectedTask.due_date as string) || ''}
                   onChange={(e) => handleUpdate({ due_date: e.target.value || null })}
                   className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -947,7 +964,7 @@ export function TaskDrawer() {
                 Progress State
               </label>
               <select
-                value={selectedTask.progress_state}
+                value={safeSelectedTask.progress_state}
                 onChange={(e) => handleUpdate({ progress_state: e.target.value })}
                 className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
               >
@@ -1164,7 +1181,7 @@ export function TaskDrawer() {
                   Notes
                 </label>
                 <div className="space-y-2">
-                  {selectedTask.notes?.map((note: any) => (
+                  {safeSelectedTask.notes?.map((note: any) => (
                     <div
                       key={note.id}
                       className="bg-amber-50 p-4 rounded-lg border-2 border-amber-200"
