@@ -35,9 +35,9 @@ import {
   createPerson,
   addDivisionToTask,
   removeDivisionFromTask,
-  // org/division management helpers from updated useData.ts
+  // org/division management helper from updated useData.ts
   createOrganizationAndLinkToDivision,
-  linkDivisionToExistingOrg,
+  // linkDivisionToExistingOrg, // (unused currently)
 } from '../hooks/useData';
 import type {
   ProgressState,
@@ -176,7 +176,7 @@ export function TaskDrawer() {
     progress_state: 'not_started',
   } as any);
 
-  // If no real task, render nothing (portal stays fine)
+  // If no real task, render nothing (component stays mounted to keep hook order stable)
   if (!selectedTask) return null;
 
   const handleClose = () => {
@@ -263,14 +263,14 @@ export function TaskDrawer() {
      DIVISIONS (org-scoped)
   -----------------------------------------------------------------------------*/
   const filteredDivisions = useMemo<Division[]>(() => {
-    if (isAdmin) return divisions;
+    if (isAdmin) return divisions || [];
     if (!userOrgTag) return [];
     return (divisions || []).filter((d) => d.organization_tag === userOrgTag);
   }, [divisions, isAdmin, userOrgTag]);
 
   const handleToggleDivision = async (divisionId: string) => {
     if (!isAdmin) {
-      const div = divisions.find((d) => d.id === divisionId);
+      const div = (divisions || []).find((d) => d.id === divisionId);
       if (div && div.organization_tag !== userOrgTag) {
         console.warn('Blocked: cannot tag another organization division.');
         return;
@@ -282,7 +282,7 @@ export function TaskDrawer() {
       if (hasDivision) {
         setTempDivisions(tempDivisions.filter((d) => d.id !== divisionId));
       } else {
-        const division = divisions.find((d) => d.id === divisionId);
+        const division = (divisions || []).find((d) => d.id === divisionId);
         if (division) setTempDivisions([...tempDivisions, division]);
       }
     } else {
@@ -295,7 +295,7 @@ export function TaskDrawer() {
       } else {
         try {
           await addDivisionToTask(safeSelectedTask.id, divisionId);
-          const division = divisions.find((d) => d.id === divisionId);
+          const division = (divisions || []).find((d) => d.id === divisionId);
           if (division) {
             updateTask(safeSelectedTask.id, {
               divisions: [...(safeSelectedTask.divisions || []), division],
@@ -582,7 +582,7 @@ export function TaskDrawer() {
     setAdminInfo('');
 
     try {
-      const existingDivision = divisions.find(
+      const existingDivision = (divisions || []).find(
         (d) => d.name.trim().toLowerCase() === name.toLowerCase()
       );
 
@@ -803,7 +803,7 @@ export function TaskDrawer() {
 
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-2">
-                  {(isAdmin ? divisions : filteredDivisions).map((division) => {
+                  {((isAdmin ? divisions : filteredDivisions) || []).map((division) => {
                     const isSelected = displayDivisions.some((d) => d.id === division.id);
                     const isDisabled = !isAdmin && division.organization_tag !== userOrgTag;
                     return (
@@ -1280,7 +1280,7 @@ export function TaskDrawer() {
                       className="px-3 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
                       <option value="">Auto (use same-name division or create new)</option>
-                      {divisions.map((d) => (
+                      {(divisions || []).map((d) => (
                         <option key={d.id} value={d.id}>
                           {d.name} {d.organization_tag ? `— ${d.organization_tag}` : '— (no org)'}
                         </option>
