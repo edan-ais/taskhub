@@ -13,7 +13,7 @@ import { TaskDrawer } from './components/TaskDrawer'; // 🧩 added global drawe
 // Tabs
 import { HomeTab } from './components/tabs/HomeTab';
 import { PeopleTab } from './components/tabs/PeopleTab';
-import { TagsTab } from './components/tabs/TagsTab';
+import TagsTab from './components/tabs/TagsTab'; // ✅ default import fixes build
 import { CalendarTab } from './components/tabs/CalendarTab';
 import { IdeasTab } from './components/tabs/IdeasTab';
 import { AnalyticsTab } from './components/tabs/AnalyticsTab';
