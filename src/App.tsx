@@ -8,14 +8,14 @@ import AdminDashboard from './components/AdminDashboard';
 import { useAppStore } from './lib/store';
 import { useData } from './hooks/useData';
 import { LoadingSpinner } from './components/LoadingSpinner';
-import { TaskDrawer } from './components/TaskDrawer'; // 🧩 added global drawer import
+import { TaskDrawer } from './components/TaskDrawer'; // 🧩 global drawer
 
 // Tabs
 import { HomeTab } from './components/tabs/HomeTab';
 import { PeopleTab } from './components/tabs/PeopleTab';
-import TagsTab from './components/tabs/TagsTab'; // ✅ default import fixes build
+import TagsTab from './components/tabs/TagsTab';      // ✅ default import
 import { CalendarTab } from './components/tabs/CalendarTab';
-import { IdeasTab } from './components/tabs/IdeasTab';
+import IdeasTab from './components/tabs/IdeasTab';     // ✅ default import
 import { AnalyticsTab } from './components/tabs/AnalyticsTab';
 
 export default function App() {
@@ -44,7 +44,7 @@ export default function App() {
           .single();
 
         // If no profile exists → auto-create
-        if (error && error.code === 'PGRST116') {
+        if (error && (error as any).code === 'PGRST116') {
           const isAdmin = user.email === 'edanharrofficial@gmail.com';
           const { error: insertError } = await supabase.from('profiles').insert({
             user_id: user.id,
