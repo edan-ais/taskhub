@@ -35,9 +35,9 @@ import {
   createPerson,
   addDivisionToTask,
   removeDivisionFromTask,
-  // org/division management helper from updated useData.ts
+  // org/division management helpers from updated useData.ts
   createOrganizationAndLinkToDivision,
-  // linkDivisionToExistingOrg, // (unused currently)
+  linkDivisionToExistingOrg,
 } from '../hooks/useData';
 import type {
   ProgressState,
@@ -75,14 +75,41 @@ interface UploadedFile {
   url: string;
 }
 
+/* =============================================================================
+   WRAPPER COMPONENT — keeps hooks order stable
+   Only reads selectedTask; returns null or renders the inner component.
+============================================================================= */
 export function TaskDrawer() {
+  // Single hook in wrapper — consistent every render.
+  const { selectedTask, tags, divisions } = useAppStore();
+
+  if (!selectedTask) return null; // safe early return (only one hook has run)
+
+  return (
+    <TaskDrawerInner
+      selectedTask={selectedTask}
+      tags={tags}
+      divisions={divisions}
+    />
+  );
+}
+
+/* =============================================================================
+   INNER COMPONENT — all other hooks live here; runs only when task exists
+============================================================================= */
+function TaskDrawerInner({
+  selectedTask,
+  tags,
+  divisions,
+}: {
+  selectedTask: any;
+  tags: TagType[];
+  divisions: Division[];
+}) {
   const {
-    selectedTask,
     setSelectedTask,
     updateTask,
     removeTask,
-    tags,
-    divisions,
     showDeleteConfirmation,
   } = useAppStore();
 
@@ -158,27 +185,6 @@ export function TaskDrawer() {
     }
   }, [selectedTask?.id, isNewTask]);
 
-  // React 310 guard: keep hooks order stable and avoid null field access.
-  const safeSelectedTask = selectedTask ?? ({
-    id: 'temp-null',
-    title: '',
-    description: '',
-    lane: 'red',
-    assignee: '',
-    due_date: '',
-    order_rank: 0,
-    tags: [],
-    divisions: [],
-    subtasks: [],
-    links: [],
-    files: [],
-    notes: [],
-    progress_state: 'not_started',
-  } as any);
-
-  // If no real task, render nothing (component stays mounted to keep hook order stable)
-  if (!selectedTask) return null;
-
   const handleClose = () => {
     setTempSubtasks([]);
     setTempTags([]);
@@ -199,10 +205,10 @@ export function TaskDrawer() {
   const handleUpdate = async (updates: any) => {
     try {
       if (isNewTask) {
-        updateTask(safeSelectedTask.id, updates);
+        updateTask(selectedTask.id, updates);
       } else {
-        await updateTaskData(safeSelectedTask.id, updates);
-        updateTask(safeSelectedTask.id, updates);
+        await updateTaskData(selectedTask.id, updates);
+        updateTask(selectedTask.id, updates);
       }
     } catch (e) {
       console.error('handleUpdate failed:', e);
@@ -222,18 +228,18 @@ export function TaskDrawer() {
         if (tag) setTempTags([...tempTags, tag]);
       }
     } else {
-      const hasTag = safeSelectedTask.tags?.some((t: any) => t.id === tagId);
+      const hasTag = selectedTask.tags?.some((t: any) => t.id === tagId);
       if (hasTag) {
-        await removeTagFromTask(safeSelectedTask.id, tagId);
-        updateTask(safeSelectedTask.id, {
-          tags: safeSelectedTask.tags?.filter((t: any) => t.id !== tagId),
+        await removeTagFromTask(selectedTask.id, tagId);
+        updateTask(selectedTask.id, {
+          tags: selectedTask.tags?.filter((t: any) => t.id !== tagId),
         });
       } else {
-        await addTagToTask(safeSelectedTask.id, tagId);
+        await addTagToTask(selectedTask.id, tagId);
         const tag = tags.find((t) => t.id === tagId);
         if (tag) {
-          updateTask(safeSelectedTask.id, {
-            tags: [...(safeSelectedTask.tags || []), tag],
+          updateTask(selectedTask.id, {
+            tags: [...(selectedTask.tags || []), tag],
           });
         }
       }
@@ -263,14 +269,14 @@ export function TaskDrawer() {
      DIVISIONS (org-scoped)
   -----------------------------------------------------------------------------*/
   const filteredDivisions = useMemo<Division[]>(() => {
-    if (isAdmin) return divisions || [];
+    if (isAdmin) return divisions;
     if (!userOrgTag) return [];
     return (divisions || []).filter((d) => d.organization_tag === userOrgTag);
   }, [divisions, isAdmin, userOrgTag]);
 
   const handleToggleDivision = async (divisionId: string) => {
     if (!isAdmin) {
-      const div = (divisions || []).find((d) => d.id === divisionId);
+      const div = divisions.find((d) => d.id === divisionId);
       if (div && div.organization_tag !== userOrgTag) {
         console.warn('Blocked: cannot tag another organization division.');
         return;
@@ -282,23 +288,23 @@ export function TaskDrawer() {
       if (hasDivision) {
         setTempDivisions(tempDivisions.filter((d) => d.id !== divisionId));
       } else {
-        const division = (divisions || []).find((d) => d.id === divisionId);
+        const division = divisions.find((d) => d.id === divisionId);
         if (division) setTempDivisions([...tempDivisions, division]);
       }
     } else {
-      const hasDivision = safeSelectedTask.divisions?.some((d: any) => d.id === divisionId);
+      const hasDivision = selectedTask.divisions?.some((d: any) => d.id === divisionId);
       if (hasDivision) {
-        await removeDivisionFromTask(safeSelectedTask.id, divisionId);
-        updateTask(safeSelectedTask.id, {
-          divisions: safeSelectedTask.divisions?.filter((d: any) => d.id !== divisionId),
+        await removeDivisionFromTask(selectedTask.id, divisionId);
+        updateTask(selectedTask.id, {
+          divisions: selectedTask.divisions?.filter((d: any) => d.id !== divisionId),
         });
       } else {
         try {
-          await addDivisionToTask(safeSelectedTask.id, divisionId);
-          const division = (divisions || []).find((d) => d.id === divisionId);
+          await addDivisionToTask(selectedTask.id, divisionId);
+          const division = divisions.find((d) => d.id === divisionId);
           if (division) {
-            updateTask(safeSelectedTask.id, {
-              divisions: [...(safeSelectedTask.divisions || []), division],
+            updateTask(selectedTask.id, {
+              divisions: [...(selectedTask.divisions || []), division],
             });
           }
         } catch (err) {
@@ -338,11 +344,11 @@ export function TaskDrawer() {
   /* -----------------------------------------------------------------------------
      DISPLAY SHORTHANDS
   -----------------------------------------------------------------------------*/
-  const displayTags = isNewTask ? tempTags : safeSelectedTask.tags || [];
-  const displayDivisions = isNewTask ? tempDivisions : safeSelectedTask.divisions || [];
-  const displaySubtasks = isNewTask ? tempSubtasks : safeSelectedTask.subtasks || [];
-  const displayLinks = isNewTask ? tempLinks : safeSelectedTask.links || [];
-  const displayFiles: UploadedFile[] = safeSelectedTask.files || [];
+  const displayTags = isNewTask ? tempTags : selectedTask.tags || [];
+  const displayDivisions = isNewTask ? tempDivisions : selectedTask.divisions || [];
+  const displaySubtasks = isNewTask ? tempSubtasks : selectedTask.subtasks || [];
+  const displayLinks = isNewTask ? tempLinks : selectedTask.links || [];
+  const displayFiles: UploadedFile[] = selectedTask.files || [];
 
   /* -----------------------------------------------------------------------------
      SUBTASKS
@@ -358,16 +364,16 @@ export function TaskDrawer() {
       ]);
       setNewSubtask('');
     } else {
-      const maxOrderRank = safeSelectedTask.subtasks?.length
-        ? Math.max(...safeSelectedTask.subtasks.map((st: any) => st.order_rank || 0))
+      const maxOrderRank = selectedTask.subtasks?.length
+        ? Math.max(...selectedTask.subtasks.map((st: any) => st.order_rank || 0))
         : 0;
       const subtask = await createSubtask(
-        safeSelectedTask.id,
+        selectedTask.id,
         newSubtask,
         maxOrderRank + 1000
       );
-      updateTask(safeSelectedTask.id, {
-        subtasks: [...(safeSelectedTask.subtasks || []), subtask],
+      updateTask(selectedTask.id, {
+        subtasks: [...(selectedTask.subtasks || []), subtask],
       });
       setNewSubtask('');
     }
@@ -380,8 +386,8 @@ export function TaskDrawer() {
       );
     } else {
       await updateSubtask(id, updates);
-      updateTask(safeSelectedTask.id, {
-        subtasks: safeSelectedTask.subtasks?.map((st: any) =>
+      updateTask(selectedTask.id, {
+        subtasks: selectedTask.subtasks?.map((st: any) =>
           st.id === id ? { ...st, ...updates } : st
         ),
       });
@@ -395,8 +401,8 @@ export function TaskDrawer() {
       setTempSubtasks(tempSubtasks.filter((st) => st.id !== id));
     } else {
       await deleteSubtask(id);
-      updateTask(safeSelectedTask.id, {
-        subtasks: safeSelectedTask.subtasks?.filter((st: any) => st.id !== id),
+      updateTask(selectedTask.id, {
+        subtasks: selectedTask.subtasks?.filter((st: any) => st.id !== id),
       });
     }
   };
@@ -406,17 +412,17 @@ export function TaskDrawer() {
   -----------------------------------------------------------------------------*/
   const handleAddNote = async () => {
     if (!newNote.trim() || isNewTask) return;
-    const note = await createNote(safeSelectedTask.id, newNote);
-    updateTask(safeSelectedTask.id, {
-      notes: [...(safeSelectedTask.notes || []), note],
+    const note = await createNote(selectedTask.id, newNote);
+    updateTask(selectedTask.id, {
+      notes: [...(selectedTask.notes || []), note],
     });
     setNewNote('');
   };
 
   const handleUpdateNote = async (id: string, content: string) => {
     await updateNote(id, content);
-    updateTask(safeSelectedTask.id, {
-      notes: safeSelectedTask.notes?.map((n: any) =>
+    updateTask(selectedTask.id, {
+      notes: selectedTask.notes?.map((n: any) =>
         n.id === id ? { ...n, content } : n
       ),
     });
@@ -424,8 +430,8 @@ export function TaskDrawer() {
 
   const handleDeleteNote = async (id: string) => {
     await deleteNote(id);
-    updateTask(safeSelectedTask.id, {
-      notes: safeSelectedTask.notes?.filter((n: any) => n.id !== id),
+    updateTask(selectedTask.id, {
+      notes: selectedTask.notes?.filter((n: any) => n.id !== id),
     });
   };
 
@@ -439,7 +445,7 @@ export function TaskDrawer() {
     if (isNewTask) {
       setTempLinks([...tempLinks, newLink]);
     } else {
-      const updated = [...(safeSelectedTask.links || []), newLink];
+      const updated = [...(selectedTask.links || []), newLink];
       await handleUpdate({ links: updated });
     }
 
@@ -451,7 +457,7 @@ export function TaskDrawer() {
     if (isNewTask) {
       setTempLinks(tempLinks.filter((_, i) => i !== idx));
     } else {
-      const updated = (safeSelectedTask.links || []).filter((_, i) => i !== idx);
+      const updated = (selectedTask.links || []).filter((_, i) => i !== idx);
       await handleUpdate({ links: updated });
     }
   };
@@ -468,11 +474,11 @@ export function TaskDrawer() {
     }
 
     setUploadingFiles(true);
-    const currentFiles: UploadedFile[] = safeSelectedTask.files || [];
+    const currentFiles: UploadedFile[] = selectedTask.files || [];
     const uploadedFiles: UploadedFile[] = [...currentFiles];
 
     for (const file of Array.from(files)) {
-      const path = `${safeSelectedTask.id}/${Date.now()}-${file.name}`;
+      const path = `${selectedTask.id}/${Date.now()}-${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from('task-files')
         .upload(path, file);
@@ -498,12 +504,12 @@ export function TaskDrawer() {
   const handleSaveTask = async () => {
     try {
       const newTask = await createTask({
-        title: safeSelectedTask.title || 'New Task',
-        description: safeSelectedTask.description,
-        lane: safeSelectedTask.lane,
-        assignee: safeSelectedTask.assignee,
-        due_date: safeSelectedTask.due_date,
-        order_rank: safeSelectedTask.order_rank,
+        title: selectedTask.title || 'New Task',
+        description: selectedTask.description,
+        lane: selectedTask.lane,
+        assignee: selectedTask.assignee,
+        due_date: selectedTask.due_date,
+        order_rank: selectedTask.order_rank,
       });
 
       // Regular tags (UI tags)
@@ -532,7 +538,7 @@ export function TaskDrawer() {
         });
       }
 
-      removeTask(safeSelectedTask.id);
+      removeTask(selectedTask.id);
       handleClose();
     } catch (error) {
       console.error('Error creating task:', error);
@@ -541,7 +547,7 @@ export function TaskDrawer() {
 
   const handleDeleteTask = async () => {
     if (isNewTask) {
-      removeTask(safeSelectedTask.id);
+      removeTask(selectedTask.id);
       handleClose();
       return;
     }
@@ -550,7 +556,7 @@ export function TaskDrawer() {
       'Delete Task',
       'Are you sure you want to delete this task? This action cannot be undone.',
       async () => {
-        const taskId = safeSelectedTask.id;
+        const taskId = selectedTask.id;
         handleClose();
         removeTask(taskId);
         try {
@@ -582,7 +588,7 @@ export function TaskDrawer() {
     setAdminInfo('');
 
     try {
-      const existingDivision = (divisions || []).find(
+      const existingDivision = divisions.find(
         (d) => d.name.trim().toLowerCase() === name.toLowerCase()
       );
 
@@ -654,7 +660,7 @@ export function TaskDrawer() {
               <div className="flex-1">
                 <input
                   type="text"
-                  value={safeSelectedTask.title ?? ''}
+                  value={selectedTask.title ?? ''}
                   onChange={(e) => handleUpdate({ title: e.target.value })}
                   className="w-full bg-transparent text-2xl font-bold outline-none placeholder-white/70"
                   placeholder="Task title"
@@ -688,7 +694,7 @@ export function TaskDrawer() {
                 Description
               </label>
               <textarea
-                value={safeSelectedTask.description ?? ''}
+                value={selectedTask.description ?? ''}
                 onChange={(e) => handleUpdate({ description: e.target.value })}
                 className="w-full px-4 py-3 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 rows={4}
@@ -706,7 +712,7 @@ export function TaskDrawer() {
                 </label>
                 {!showAssigneeInput ? (
                   <select
-                    value={safeSelectedTask.assignee || ''}
+                    value={selectedTask.assignee || ''}
                     onChange={(e) => {
                       if (e.target.value === '__new__') {
                         setShowAssigneeInput(true);
@@ -777,7 +783,7 @@ export function TaskDrawer() {
                 </label>
                 <input
                   type="date"
-                  value={(safeSelectedTask.due_date as string) || ''}
+                  value={(selectedTask.due_date as string) || ''}
                   onChange={(e) => handleUpdate({ due_date: e.target.value || null })}
                   className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -803,7 +809,7 @@ export function TaskDrawer() {
 
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-2">
-                  {((isAdmin ? divisions : filteredDivisions) || []).map((division) => {
+                  {(isAdmin ? divisions : filteredDivisions).map((division) => {
                     const isSelected = displayDivisions.some((d) => d.id === division.id);
                     const isDisabled = !isAdmin && division.organization_tag !== userOrgTag;
                     return (
@@ -964,7 +970,7 @@ export function TaskDrawer() {
                 Progress State
               </label>
               <select
-                value={safeSelectedTask.progress_state}
+                value={selectedTask.progress_state}
                 onChange={(e) => handleUpdate({ progress_state: e.target.value })}
                 className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
               >
@@ -981,10 +987,7 @@ export function TaskDrawer() {
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <CheckSquare size={16} className="inline mr-1" />
                 Subtasks (
-                {
-                  displaySubtasks.filter((st) => st.progress_state === 'completed')
-                    .length
-                }
+                {displaySubtasks.filter((st) => st.progress_state === 'completed').length}
                 /{displaySubtasks.length})
               </label>
               <div className="space-y-2">
@@ -1181,7 +1184,7 @@ export function TaskDrawer() {
                   Notes
                 </label>
                 <div className="space-y-2">
-                  {safeSelectedTask.notes?.map((note: any) => (
+                  {selectedTask.notes?.map((note: any) => (
                     <div
                       key={note.id}
                       className="bg-amber-50 p-4 rounded-lg border-2 border-amber-200"
@@ -1280,7 +1283,7 @@ export function TaskDrawer() {
                       className="px-3 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
                       <option value="">Auto (use same-name division or create new)</option>
-                      {(divisions || []).map((d) => (
+                      {divisions.map((d) => (
                         <option key={d.id} value={d.id}>
                           {d.name} {d.organization_tag ? `— ${d.organization_tag}` : '— (no org)'}
                         </option>
