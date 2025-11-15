@@ -12,9 +12,7 @@ import {
   Edit2,
   Link2,
   Paperclip,
-  ShieldCheck,
-  Building2,
-  Link as LinkIcon,
+  AlertCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -32,12 +30,8 @@ import {
   createNote,
   updateNote,
   deleteNote,
-  createPerson,
   addDivisionToTask,
   removeDivisionFromTask,
-  // org/division management helpers from updated useData.ts
-  createOrganizationAndLinkToDivision,
-  linkDivisionToExistingOrg,
 } from '../hooks/useData';
 import type {
   ProgressState,
@@ -77,14 +71,10 @@ interface UploadedFile {
 
 /* =============================================================================
    WRAPPER COMPONENT — keeps hooks order stable
-   Only reads selectedTask; returns null or renders the inner component.
 ============================================================================= */
 export function TaskDrawer() {
-  // Single hook in wrapper — consistent every render.
   const { selectedTask, tags, divisions } = useAppStore();
-
-  if (!selectedTask) return null; // safe early return (only one hook has run)
-
+  if (!selectedTask) return null;
   return (
     <TaskDrawerInner
       selectedTask={selectedTask}
@@ -95,7 +85,7 @@ export function TaskDrawer() {
 }
 
 /* =============================================================================
-   INNER COMPONENT — all other hooks live here; runs only when task exists
+   INNER COMPONENT
 ============================================================================= */
 function TaskDrawerInner({
   selectedTask,
@@ -117,34 +107,18 @@ function TaskDrawerInner({
   const [userOrgTag, setUserOrgTag] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
-  // new task temp state
+  // local temp state for new task
   const [newSubtask, setNewSubtask] = useState('');
   const [tempSubtasks, setTempSubtasks] = useState<TempSubtask[]>([]);
   const [tempTags, setTempTags] = useState<TagType[]>([]);
   const [tempDivisions, setTempDivisions] = useState<Division[]>([]);
   const [newNote, setNewNote] = useState('');
-  const [newTagName, setNewTagName] = useState('');
-  const [newTagColor, setNewTagColor] = useState('#3B82F6');
-  const [isCreatingTag, setIsCreatingTag] = useState(false);
-  const [newDivisionName, setNewDivisionName] = useState('');
-  const [newDivisionColor, setNewDivisionColor] = useState('#8B5CF6');
-  const [isCreatingDivision, setIsCreatingDivision] = useState(false);
-  const [newAssignee, setNewAssignee] = useState('');
-  const [showAssigneeInput, setShowAssigneeInput] = useState(false);
-  const [editingSubtask, setEditingSubtask] = useState<string | null>(null);
-  const [editingSubtaskTitle, setEditingSubtaskTitle] = useState('');
   const [newLinkLabel, setNewLinkLabel] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
   const [tempLinks, setTempLinks] = useState<LinkItem[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const isNewTask = selectedTask?.id?.startsWith('temp-');
   const { people } = useAppStore.getState();
-
-  // Admin panel (org creation/linking) state
-  const [adminOrgName, setAdminOrgName] = useState('');
-  const [adminTargetDivisionId, setAdminTargetDivisionId] = useState<string>('');
-  const [adminBusy, setAdminBusy] = useState(false);
-  const [adminInfo, setAdminInfo] = useState<string>('');
 
   // tenancy bootstrap
   useEffect(() => {
@@ -168,8 +142,7 @@ function TaskDrawerInner({
         const org = profile?.organization_tag || null;
         setUserOrgTag(org);
         setIsAdmin(org === ADMIN_ORG_TAG);
-      } catch (err) {
-        console.error('Auth bootstrap failed:', err);
+      } catch {
         setUserOrgTag(null);
         setIsAdmin(false);
       }
@@ -192,13 +165,8 @@ function TaskDrawerInner({
     setTempLinks([]);
     setNewSubtask('');
     setNewNote('');
-    setNewAssignee('');
-    setShowAssigneeInput(false);
-    setEditingSubtask(null);
-    setEditingSubtaskTitle('');
-    setAdminOrgName('');
-    setAdminTargetDivisionId('');
-    setAdminInfo('');
+    setNewLinkLabel('');
+    setNewLinkUrl('');
     setSelectedTask(null);
   };
 
@@ -216,7 +184,7 @@ function TaskDrawerInner({
   };
 
   /* -----------------------------------------------------------------------------
-     REGULAR TAGS (not divisions)
+     TAGS (toggle only — no create/delete here)
   -----------------------------------------------------------------------------*/
   const handleToggleTag = async (tagId: string) => {
     if (isNewTask) {
@@ -246,27 +214,8 @@ function TaskDrawerInner({
     }
   };
 
-  const handleCreateTag = async () => {
-    if (!newTagName.trim()) return;
-    try {
-      const { data: tag, error } = await supabase
-        .from('tags')
-        .insert({ name: newTagName, color: newTagColor })
-        .select()
-        .single();
-      if (error) throw error;
-      const { addTag } = useAppStore.getState();
-      addTag(tag);
-      setNewTagName('');
-      setNewTagColor('#3B82F6');
-      setIsCreatingTag(false);
-    } catch (error) {
-      console.error('Error creating tag:', error);
-    }
-  };
-
   /* -----------------------------------------------------------------------------
-     DIVISIONS (org-scoped)
+     DIVISIONS (toggle only — creation managed in Tags/Divisions tab)
   -----------------------------------------------------------------------------*/
   const filteredDivisions = useMemo<Division[]>(() => {
     if (isAdmin) return divisions;
@@ -278,8 +227,7 @@ function TaskDrawerInner({
     if (!isAdmin) {
       const div = divisions.find((d) => d.id === divisionId);
       if (div && div.organization_tag !== userOrgTag) {
-        console.warn('Blocked: cannot tag another organization division.');
-        return;
+        return; // block cross-org tagging
       }
     }
 
@@ -314,45 +262,11 @@ function TaskDrawerInner({
     }
   };
 
-  const handleCreateDivision = async () => {
-    if (!isAdmin) {
-      alert('Only admins can create new divisions.');
-      return;
-    }
-    if (!newDivisionName.trim()) return;
-    try {
-      const { data: division, error } = await supabase
-        .from('divisions')
-        .insert({
-          name: newDivisionName,
-          color: newDivisionColor,
-          order_index: Date.now(),
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      const { addDivision } = useAppStore.getState();
-      addDivision(division);
-      setNewDivisionName('');
-      setNewDivisionColor('#8B5CF6');
-      setIsCreatingDivision(false);
-    } catch (error) {
-      console.error('Error creating division:', error);
-    }
-  };
-
-  /* -----------------------------------------------------------------------------
-     DISPLAY SHORTHANDS
-  -----------------------------------------------------------------------------*/
-  const displayTags = isNewTask ? tempTags : selectedTask.tags || [];
-  const displayDivisions = isNewTask ? tempDivisions : selectedTask.divisions || [];
-  const displaySubtasks = isNewTask ? tempSubtasks : selectedTask.subtasks || [];
-  const displayLinks = isNewTask ? tempLinks : selectedTask.links || [];
-  const displayFiles: UploadedFile[] = selectedTask.files || [];
-
   /* -----------------------------------------------------------------------------
      SUBTASKS
   -----------------------------------------------------------------------------*/
+  const displaySubtasks = isNewTask ? tempSubtasks : selectedTask.subtasks || [];
+
   const handleAddSubtask = async () => {
     if (!newSubtask.trim()) return;
 
@@ -392,8 +306,6 @@ function TaskDrawerInner({
         ),
       });
     }
-    setEditingSubtask(null);
-    setEditingSubtaskTitle('');
   };
 
   const handleDeleteSubtask = async (id: string) => {
@@ -438,6 +350,8 @@ function TaskDrawerInner({
   /* -----------------------------------------------------------------------------
      LINKS
   -----------------------------------------------------------------------------*/
+  const displayLinks = isNewTask ? tempLinks : selectedTask.links || [];
+
   const handleAddLink = async () => {
     if (!newLinkLabel.trim() || !newLinkUrl.trim()) return;
     const newLink = { label: newLinkLabel.trim(), url: newLinkUrl.trim() };
@@ -463,8 +377,10 @@ function TaskDrawerInner({
   };
 
   /* -----------------------------------------------------------------------------
-     FILE UPLOADS
+     FILES
   -----------------------------------------------------------------------------*/
+  const displayFiles: UploadedFile[] = selectedTask.files || [];
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || !files.length) return;
@@ -512,12 +428,12 @@ function TaskDrawerInner({
         order_rank: selectedTask.order_rank,
       });
 
-      // Regular tags (UI tags)
+      // Tags
       for (const tag of tempTags) {
         await addTagToTask(newTask.id, tag.id);
       }
 
-      // Divisions (org scoped)
+      // Divisions
       for (const division of tempDivisions) {
         try {
           await addDivisionToTask(newTask.id, division.id);
@@ -569,70 +485,10 @@ function TaskDrawerInner({
   };
 
   /* -----------------------------------------------------------------------------
-     ADMIN: Organization ↔ Division linking tool
-     - Rule:
-       • If orgName equals an existing division name (e.g., "Hubbalicious"),
-         mint a new organization_tag and LINK it to that EXISTING division.
-       • If orgName is a new name (e.g., "Hubbalicious Sweet Shoppe"),
-         create a NEW division with that name and then link a brand new
-         organization_tag to that new division.
+     DISPLAY SHORTHANDS
   -----------------------------------------------------------------------------*/
-  const handleAdminAddOrgForDivision = async () => {
-    if (!isAdmin) return;
-    const name = adminOrgName.trim();
-    if (!name) {
-      setAdminInfo('Enter an organization name.');
-      return;
-    }
-    setAdminBusy(true);
-    setAdminInfo('');
-
-    try {
-      const existingDivision = divisions.find(
-        (d) => d.name.trim().toLowerCase() === name.toLowerCase()
-      );
-
-      let divisionIdToLink = adminTargetDivisionId || '';
-
-      if (existingDivision) {
-        divisionIdToLink = existingDivision.id;
-      } else if (!divisionIdToLink) {
-        const { data: newDiv, error: divErr } = await supabase
-          .from('divisions')
-          .insert({
-            name,
-            color: '#0ea5e9',
-            order_index: Date.now(),
-          })
-          .select()
-          .single();
-        if (divErr) throw divErr;
-        const { addDivision } = useAppStore.getState();
-        addDivision(newDiv as any);
-        divisionIdToLink = newDiv.id;
-      }
-
-      if (!divisionIdToLink) {
-        setAdminInfo('Select a division to link or enter a same-name org.');
-        setAdminBusy(false);
-        return;
-      }
-
-      const { organization_tag } = await createOrganizationAndLinkToDivision(
-        name,
-        divisionIdToLink
-      );
-
-      setAdminInfo(`Created and linked org "${name}" → ${organization_tag}`);
-      setAdminOrgName('');
-      setAdminTargetDivisionId('');
-    } catch (e: any) {
-      console.error(e);
-      setAdminInfo(e?.message || 'Failed to add organization.');
-    } finally {
-      setAdminBusy(false);
-    }
-  };
+  const displayTags = isNewTask ? tempTags : selectedTask.tags || [];
+  const displayDivisions = isNewTask ? tempDivisions : selectedTask.divisions || [];
 
   /* -----------------------------------------------------------------------------
      RENDER
@@ -665,17 +521,6 @@ function TaskDrawerInner({
                   className="w-full bg-transparent text-2xl font-bold outline-none placeholder-white/70"
                   placeholder="Task title"
                 />
-                {isAdmin ? (
-                  <div className="mt-1 text-xs text-blue-100 flex items-center gap-2">
-                    <ShieldCheck size={14} />
-                    <span>Admin mode — tasks are admin-only until you add divisions.</span>
-                  </div>
-                ) : userOrgTag ? (
-                  <div className="mt-1 text-xs text-blue-100 flex items-center gap-2">
-                    <Building2 size={14} />
-                    <span>Organization: {userOrgTag}</span>
-                  </div>
-                ) : null}
               </div>
               <button
                 onClick={handleClose}
@@ -704,75 +549,24 @@ function TaskDrawerInner({
 
             {/* Assignee & Due Date */}
             <div className="grid grid-cols-2 gap-4">
-              {/* Assignee */}
+              {/* Assignee (select only; no create) */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   <User size={16} className="inline mr-1" />
                   Assignee
                 </label>
-                {!showAssigneeInput ? (
-                  <select
-                    value={selectedTask.assignee || ''}
-                    onChange={(e) => {
-                      if (e.target.value === '__new__') {
-                        setShowAssigneeInput(true);
-                      } else {
-                        handleUpdate({ assignee: e.target.value });
-                      }
-                    }}
-                    className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
-                  >
-                    <option value="">Unassigned</option>
-                    {people.map((person) => (
-                      <option key={person.id} value={person.name}>
-                        {person.name}
-                      </option>
-                    ))}
-                    <option value="__new__">+ Add New Person</option>
-                  </select>
-                ) : (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newAssignee}
-                      onChange={(e) => setNewAssignee(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && newAssignee.trim() && (async () => {
-                        const person = await createPerson(newAssignee);
-                        const { addPerson } = useAppStore.getState();
-                        addPerson(person);
-                        handleUpdate({ assignee: newAssignee });
-                        setNewAssignee('');
-                        setShowAssigneeInput(false);
-                      })()}
-                      className="flex-1 px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter name..."
-                      autoFocus
-                    />
-                    <button
-                      onClick={async () => {
-                        if (!newAssignee.trim()) return;
-                        const person = await createPerson(newAssignee);
-                        const { addPerson } = useAppStore.getState();
-                        addPerson(person);
-                        handleUpdate({ assignee: newAssignee });
-                        setNewAssignee('');
-                        setShowAssigneeInput(false);
-                      }}
-                      className="px-4 h-10 bg-blue-600 text-white rounded-lg border-2 border-blue-700 hover:bg-blue-700 transition-colors"
-                    >
-                      Add
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowAssigneeInput(false);
-                        setNewAssignee('');
-                      }}
-                      className="px-4 h-10 bg-slate-200 text-slate-700 rounded-lg border-2 border-slate-300 hover:bg-slate-300 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                )}
+                <select
+                  value={selectedTask.assignee || ''}
+                  onChange={(e) => handleUpdate({ assignee: e.target.value })}
+                  className="w-full px-4 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+                >
+                  <option value="">Unassigned</option>
+                  {people.map((person) => (
+                    <option key={person.id} value={person.name}>
+                      {person.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Due Date */}
@@ -790,177 +584,68 @@ function TaskDrawerInner({
               </div>
             </div>
 
-            {/* Divisions (org-scoped) */}
+            {/* Divisions (toggle only) */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <Layers size={16} className="inline mr-1" />
                 Divisions
               </label>
 
-              {isAdmin ? (
-                <p className="text-xs text-slate-500 mb-2">
-                  Admin can apply any division. Leaving all divisions empty keeps the task visible only to admin accounts.
-                </p>
-              ) : (
-                <p className="text-xs text-slate-500 mb-2">
-                  You can only add your organization’s divisions.
-                </p>
-              )}
-
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-2">
-                  {(isAdmin ? divisions : filteredDivisions).map((division) => {
-                    const isSelected = displayDivisions.some((d) => d.id === division.id);
-                    const isDisabled = !isAdmin && division.organization_tag !== userOrgTag;
-                    return (
-                      <button
-                        key={division.id}
-                        onClick={() => !isDisabled && handleToggleDivision(division.id)}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium border-2 transition-all ${
-                          isSelected
-                            ? 'ring-2 ring-offset-1'
-                            : 'opacity-60 hover:opacity-100'
-                        } ${isDisabled ? 'cursor-not-allowed opacity-40' : ''}`}
-                        style={{
-                          backgroundColor: `${division.color}20`,
-                          color: division.color,
-                          borderColor: division.color,
-                        }}
-                        title={
-                          isDisabled
-                            ? 'Cannot select another organization’s division'
-                            : division.organization_tag
-                            ? `Org: ${division.organization_tag}`
-                            : 'No organization set'
-                        }
-                      >
-                        {division.name}
-                      </button>
-                    );
-                  })}
-
-                  {/* Division creation restricted to admin */}
-                  {isAdmin && (
+              <div className="flex flex-wrap gap-2">
+                {(isAdmin ? divisions : filteredDivisions).map((division) => {
+                  const isSelected = displayDivisions.some((d) => d.id === division.id);
+                  const isDisabled = !isAdmin && division.organization_tag !== userOrgTag;
+                  return (
                     <button
-                      onClick={() => setIsCreatingDivision(!isCreatingDivision)}
-                      className="px-3 py-1.5 rounded-full text-sm font-medium border-2 border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all"
+                      key={division.id}
+                      onClick={() => !isDisabled && handleToggleDivision(division.id)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium border-2 transition-all ${
+                        isSelected ? 'ring-2 ring-offset-1' : 'opacity-60 hover:opacity-100'
+                      } ${isDisabled ? 'cursor-not-allowed opacity-40' : ''}`}
+                      style={{
+                        backgroundColor: `${division.color}20`,
+                        color: division.color,
+                        borderColor: division.color,
+                      }}
+                      title={
+                        isDisabled
+                          ? 'Division not available for your organization'
+                          : undefined
+                      }
                     >
-                      + Create Division
+                      {division.name}
                     </button>
-                  )}
-                </div>
-
-                {isCreatingDivision && isAdmin && (
-                  <div className="flex flex-col gap-3 p-3 bg-slate-50 rounded-lg border-2 border-slate-200">
-                    <div className="flex gap-2 items-center">
-                      <input
-                        type="text"
-                        value={newDivisionName}
-                        onChange={(e) => setNewDivisionName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleCreateDivision()}
-                        placeholder="Division name"
-                        className="flex-1 px-3 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <input
-                        type="color"
-                        value={newDivisionColor}
-                        onChange={(e) => setNewDivisionColor(e.target.value)}
-                        className="w-12 h-10 rounded cursor-pointer"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleCreateDivision}
-                        className="px-4 h-10 bg-violet-600 text-white rounded-lg border-2 border-violet-700 hover:bg-violet-700 transition-colors"
-                      >
-                        Create
-                      </button>
-                      <button
-                        onClick={() => {
-                          setIsCreatingDivision(false);
-                          setNewDivisionName('');
-                          setNewDivisionColor('#8B5CF6');
-                        }}
-                        className="px-4 h-10 bg-slate-200 text-slate-700 rounded-lg border-2 border-slate-300 hover:bg-slate-300 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
             </div>
 
-            {/* Tags (regular, non-division) */}
+            {/* Tags (toggle only) */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <Tag size={16} className="inline mr-1" />
                 Tags
               </label>
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-2">
-                  {tags.map((tag) => {
-                    const isSelected = displayTags.some((t) => t.id === tag.id);
-                    return (
-                      <button
-                        key={tag.id}
-                        onClick={() => handleToggleTag(tag.id)}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium border-2 transition-all ${
-                          isSelected
-                            ? 'ring-2 ring-offset-1'
-                            : 'opacity-60 hover:opacity-100'
-                        }`}
-                        style={{
-                          backgroundColor: `${tag.color}20`,
-                          color: tag.color,
-                          borderColor: tag.color,
-                        }}
-                      >
-                        {tag.name}
-                      </button>
-                    );
-                  })}
-                  <button
-                    onClick={() => setIsCreatingTag(!isCreatingTag)}
-                    className="px-3 py-1.5 rounded-full text-sm font-medium border-2 border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all"
-                  >
-                    + Add Tag
-                  </button>
-                </div>
-                {isCreatingTag && (
-                  <div className="flex gap-2 items-center p-3 bg-slate-50 rounded-lg border-2 border-slate-200">
-                    <input
-                      type="text"
-                      value={newTagName}
-                      onChange={(e) => setNewTagName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleCreateTag()}
-                      placeholder="Tag name"
-                      className="flex-1 px-3 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <input
-                      type="color"
-                      value={newTagColor}
-                      onChange={(e) => setNewTagColor(e.target.value)}
-                      className="w-12 h-10 rounded cursor-pointer"
-                    />
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag) => {
+                  const isSelected = displayTags.some((t) => t.id === tag.id);
+                  return (
                     <button
-                      onClick={handleCreateTag}
-                      className="px-4 h-10 bg-blue-600 text-white rounded-lg border-2 border-blue-700 hover:bg-blue-700 transition-colors"
-                    >
-                      Create
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsCreatingTag(false);
-                        setNewTagName('');
-                        setNewTagColor('#3B82F6');
+                      key={tag.id}
+                      onClick={() => handleToggleTag(tag.id)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium border-2 transition-all ${
+                        isSelected ? 'ring-2 ring-offset-1' : 'opacity-60 hover:opacity-100'
+                      }`}
+                      style={{
+                        backgroundColor: `${tag.color}20`,
+                        color: tag.color,
+                        borderColor: tag.color,
                       }}
-                      className="px-4 h-10 bg-slate-200 text-slate-700 rounded-lg border-2 border-slate-300 hover:bg-slate-300 transition-colors"
                     >
-                      Cancel
+                      {tag.name}
                     </button>
-                  </div>
-                )}
+                  );
+                })}
               </div>
             </div>
 
@@ -1008,50 +693,7 @@ function TaskDrawerInner({
                       }
                       className="w-4 h-4 rounded border-slate-300"
                     />
-                    {editingSubtask === subtask.id ? (
-                      <input
-                        type="text"
-                        value={editingSubtaskTitle}
-                        onChange={(e) => setEditingSubtaskTitle(e.target.value)}
-                        onBlur={() => {
-                          if (editingSubtaskTitle.trim()) {
-                            handleUpdateSubtask(subtask.id, {
-                              title: editingSubtaskTitle.trim(),
-                            });
-                          } else {
-                            setEditingSubtask(null);
-                            setEditingSubtaskTitle('');
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            if (editingSubtaskTitle.trim()) {
-                              handleUpdateSubtask(subtask.id, {
-                                title: editingSubtaskTitle.trim(),
-                              });
-                            } else {
-                              setEditingSubtask(null);
-                              setEditingSubtaskTitle('');
-                            }
-                          }
-                        }}
-                        className="flex-1 px-2 py-1 bg-white border border-slate-300 rounded outline-none focus:ring-2 focus:ring-blue-500"
-                        autoFocus
-                      />
-                    ) : (
-                      <>
-                        <span className="flex-1">{subtask.title}</span>
-                        <button
-                          onClick={() => {
-                            setEditingSubtask(subtask.id);
-                            setEditingSubtaskTitle(subtask.title);
-                          }}
-                          className="p-1 hover:bg-blue-100 rounded text-blue-600"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                      </>
-                    )}
+                    <span className="flex-1">{subtask.title}</span>
                     <button
                       onClick={() => handleDeleteSubtask(subtask.id)}
                       className="p-1 hover:bg-red-100 rounded text-red-600"
@@ -1243,71 +885,6 @@ function TaskDrawerInner({
                 {isNewTask ? 'Cancel' : 'Delete Task'}
               </button>
             </div>
-
-            {/* -----------------------------------------------------------------
-                ADMIN PANEL — add organization & link to divisions
-               ----------------------------------------------------------------- */}
-            {isAdmin && (
-              <div className="mt-6 p-4 rounded-xl border-2 border-slate-200 bg-slate-50">
-                <div className="flex items-center gap-2 mb-3">
-                  <LinkIcon size={18} className="text-slate-600" />
-                  <h3 className="text-sm font-semibold text-slate-700">
-                    Organization Linking (Admin)
-                  </h3>
-                </div>
-
-                <p className="text-xs text-slate-600 mb-3">
-                  Rule: If the organization name matches an existing division name (e.g., <b>Hubbalicious</b>), a new organization tag is created and linked to that <em>same</em> division. Otherwise a new division is created using the organization name and then linked to a new organization tag (e.g., <b>Hubbalicious Sweet Shoppe</b>).
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-slate-700">
-                      Organization name
-                    </label>
-                    <input
-                      value={adminOrgName}
-                      onChange={(e) => setAdminOrgName(e.target.value)}
-                      placeholder="e.g. Hubbalicious"
-                      className="px-3 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-slate-700">
-                      Target division (optional)
-                    </label>
-                    <select
-                      value={adminTargetDivisionId}
-                      onChange={(e) => setAdminTargetDivisionId(e.target.value)}
-                      className="px-3 h-10 rounded-lg border-2 border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="">Auto (use same-name division or create new)</option>
-                      {divisions.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name} {d.organization_tag ? `— ${d.organization_tag}` : '— (no org)'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={handleAdminAddOrgForDivision}
-                    disabled={adminBusy}
-                    className="px-4 h-10 bg-blue-600 text-white rounded-lg border-2 border-blue-700 hover:bg-blue-700 transition-colors disabled:opacity-60"
-                  >
-                    {adminBusy ? 'Linking…' : 'Add Organization & Link'}
-                  </button>
-                  {adminInfo && (
-                    <div className="text-xs text-slate-600 self-center">
-                      {adminInfo}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         </motion.div>
       </motion.div>
