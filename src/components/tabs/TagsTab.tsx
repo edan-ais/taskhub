@@ -147,33 +147,19 @@ export default function TagsTab() {
       let usageMap: Record<string, number> = {};
 
       if (ids.length) {
-        // Group counts from junction table task_tags(tag_id, task_id)
-        const { data: usage, error: usageErr } = await supabase
+        // Reliable reduce over tag_ids present in junctions for these tags
+        const { data: rows, error: usageErr } = await supabase
           .from("task_tags")
-          .select("tag_id, count:tag_id", { count: "exact", head: false }); // fallback; not group-by capable in head:false
-        // If the above doesn't produce group counts in your schema, fallback to explicit group-by RPC pattern:
-        if (usageErr || !usage) {
-          // Try manual group fetch (some PostgREST setups support this syntax)
-          const { data: grouped } = await supabase
-            .from("task_tags")
-            .select("tag_id")
-            .in("tag_id", ids);
-          if (grouped) {
-            usageMap = grouped.reduce((acc: Record<string, number>, row: any) => {
-              acc[row.tag_id] = (acc[row.tag_id] || 0) + 1;
-              return acc;
-            }, {});
-          }
-        } else {
-          // Some drivers return all rows; we still reduce
-          usageMap = (usage as any[]).reduce(
-            (acc: Record<string, number>, row: any) => {
-              acc[row.tag_id] = (acc[row.tag_id] || 0) + 1;
-              return acc;
-            },
-            {}
-          );
-        }
+          .select("tag_id")
+          .in("tag_id", ids);
+
+        if (usageErr) throw usageErr;
+
+        usageMap =
+          (rows || []).reduce((acc: Record<string, number>, r: { tag_id: string }) => {
+            acc[r.tag_id] = (acc[r.tag_id] || 0) + 1;
+            return acc;
+          }, {}) || {};
       }
 
       const withCounts: TagRow[] = (rawTags || []).map((t) => ({
@@ -820,3 +806,6 @@ export default function TagsTab() {
     </div>
   );
 }
+
+// Support named import in App.tsx: `import { TagsTab } from './components/tabs/TagsTab'`
+export { TagsTab };
